@@ -888,13 +888,10 @@ function initials(name) {
 async function exportPersonsList() {
   const allPersons = await dbGetAll('persons');
   const active = allPersons.filter(p => !p.inactive);
-  const lines = active.map(p => 
+  const lines = active.map(p =>
     `  {id:'${p.id}',name:'${p.name}',role:'${p.role}',ci:'${p.ci||''}'},`
-  ).join('
-');
-  const code = 'const PERSONS = [
-' + lines + '
-];';
+  ).join('\n');
+  const code = 'const PERSONS = [\n' + lines + '\n];';
   try {
     await navigator.clipboard.writeText(code);
     document.getElementById('personsExportLog').style.display = 'block';
@@ -910,8 +907,6 @@ function formatName(name) {
     return parts[1].trim() + ' ' + parts[0].trim();
   }
   return name;
-}
-  return toTitle(name);
 }
 
 async function renderSidebar() {
