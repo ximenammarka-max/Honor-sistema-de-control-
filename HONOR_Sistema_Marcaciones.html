@@ -1,0 +1,2066 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HONOR · Sistema de Marcaciones</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pptxgenjs/3.12.0/pptxgen.bundle.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --navy:#1a1f3a;--navy2:#252b4a;--navy3:#2f3660;
+  --gold:#c9a84c;--gold2:#f0d98a;
+  --white:#fff;--cream:#f7f6f2;--gray:#8a8ea8;--gray-l:#e8e9f0;--gray-ll:#f4f5f9;
+  --green:#219653;--green-l:#eafaf1;
+  --red:#c0392b;--red-l:#fde8e8;
+  --yellow:#f39c12;--yellow-l:#fef9ee;
+  --blue:#2563eb;--blue-l:#eff6ff;
+  --r:12px;--r2:8px;
+  --sidebar:260px;--header:56px;
+}
+body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--navy);min-height:100vh;display:flex;flex-direction:column;}
+
+/* ── HEADER ── */
+.hdr{height:var(--header);background:var(--navy);display:flex;align-items:center;padding:0 1.25rem;gap:1rem;position:fixed;top:0;left:0;right:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.3);}
+.hdr-logo{font-size:1.1rem;font-weight:700;letter-spacing:.12em;color:var(--white);}
+.hdr-logo span{color:var(--gold);}
+.hdr-dot{width:6px;height:6px;border-radius:50%;background:var(--gold);flex-shrink:0;}
+.hdr-sync{font-size:.7rem;color:var(--gray);display:flex;align-items:center;gap:.35rem;margin-left:auto;}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:var(--green);flex-shrink:0;}
+.hdr-btn{background:rgba(255,255,255,.08);border:none;border-radius:6px;color:var(--white);font-family:'DM Sans',sans-serif;font-size:.75rem;padding:.35rem .75rem;cursor:pointer;white-space:nowrap;}
+.hdr-btn:hover{background:rgba(255,255,255,.15);}
+
+/* ── NAV TABS ── */
+.nav-tabs{background:var(--navy2);display:flex;padding:0 1.25rem;position:fixed;top:56px;left:0;right:0;z-index:99;border-bottom:1px solid rgba(255,255,255,.06);height:38px;}
+.nav-tab{padding:.65rem 1rem;font-size:.78rem;font-weight:600;color:var(--gray);cursor:pointer;border-bottom:2.5px solid transparent;white-space:nowrap;display:flex;align-items:center;gap:.4rem;transition:all .15s;}
+.nav-tab:hover{color:var(--white);}
+.nav-tab.active{color:var(--gold);border-bottom-color:var(--gold);}
+.nav-tab .tab-badge{background:var(--red);color:#fff;font-size:.6rem;font-weight:700;border-radius:10px;padding:.1rem .4rem;min-width:16px;text-align:center;}
+
+/* ── LAYOUT ── */
+.app-body{margin-top:94px;display:flex;flex:1;height:calc(100vh - 94px);overflow:hidden;}
+.sidebar{width:var(--sidebar);background:var(--white);border-right:1px solid var(--gray-l);display:flex;flex-direction:column;position:fixed;top:94px;bottom:0;overflow:hidden;}
+.sidebar-top{flex-shrink:0;}
+#personList{overflow-y:auto;flex:1;}
+.main{margin-left:260px;flex:1;padding:1.25rem;overflow-y:auto;height:100%;}
+
+/* ── SIDEBAR ── */
+.sidebar-section{padding:.75rem 1rem .4rem;font-size:.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gray);}
+.sidebar-search{padding:.5rem .75rem;position:relative;}
+.sidebar-search input{width:100%;border:1.5px solid var(--gray-l);border-radius:8px;padding:.5rem .75rem .5rem 2rem;font-family:'DM Sans',sans-serif;font-size:.8rem;color:var(--navy);background:var(--gray-ll);}
+.sidebar-search input:focus{outline:none;border-color:var(--navy);background:var(--white);}
+.sidebar-search .s-ico{position:absolute;left:1.2rem;top:50%;transform:translateY(-50%);font-size:.85rem;color:var(--gray);}
+.filter-chips{display:flex;gap:.35rem;padding:.35rem .75rem;}
+.chip{padding:.25rem .65rem;border-radius:20px;font-size:.7rem;font-weight:600;cursor:pointer;border:1.5px solid var(--gray-l);color:var(--gray);background:var(--white);}
+.chip.active{background:var(--navy);color:var(--white);border-color:var(--navy);}
+.person-item{display:flex;align-items:center;gap:.65rem;padding:.55rem .75rem;cursor:pointer;border-radius:8px;margin:.1rem .5rem;transition:all .12s;}
+.person-item:hover{background:var(--gray-ll);}
+.person-item.active{background:var(--navy);color:var(--white);}
+.p-avatar{width:32px;height:32px;border-radius:50%;background:var(--navy3);color:var(--white);font-size:.68rem;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.person-item.active .p-avatar{background:var(--gold);color:var(--navy);}
+.p-info{flex:1;min-width:0;}
+.p-name{font-size:.78rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.p-role{font-size:.65rem;color:var(--gray);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.person-item.active .p-role{color:rgba(255,255,255,.6);}
+.p-cov{font-size:.68rem;font-weight:700;color:var(--gray);flex-shrink:0;}
+.person-item.active .p-cov{color:var(--gold);}
+.p-type-badge{font-size:.58rem;font-weight:700;padding:.1rem .35rem;border-radius:4px;flex-shrink:0;}
+.p-type-campo{background:var(--green-l);color:var(--green);}
+.p-type-oficina{background:var(--blue-l);color:var(--blue);}
+.p-type-impulso{background:var(--yellow-l);color:var(--yellow);}
+.sidebar-add-btn{margin:.5rem .75rem;padding:.6rem;border:1.5px dashed var(--gray-l);border-radius:8px;background:none;color:var(--gray);font-family:'DM Sans',sans-serif;font-size:.75rem;cursor:pointer;width:calc(100% - 1.5rem);text-align:center;}
+.sidebar-add-btn:hover{border-color:var(--navy);color:var(--navy);}
+
+/* ── PERSON HEADER ── */
+.person-hdr{background:var(--white);border-radius:var(--r);padding:1rem 1.25rem;display:flex;align-items:center;gap:1rem;margin-bottom:1rem;box-shadow:0 1px 3px rgba(0,0,0,.06);}
+.ph-avatar{width:48px;height:48px;border-radius:50%;background:var(--navy);color:var(--white);font-size:1rem;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.ph-name{font-size:1.05rem;font-weight:700;}
+.ph-role{font-size:.75rem;color:var(--gray);margin-top:.15rem;}
+.ph-type{font-size:.65rem;font-weight:700;padding:.2rem .6rem;border-radius:20px;margin-top:.2rem;display:inline-block;}
+.ph-actions{margin-left:auto;display:flex;gap:.5rem;align-items:center;}
+.ph-cov{background:var(--navy);color:var(--white);border-radius:10px;padding:.5rem .85rem;text-align:center;min-width:80px;}
+.ph-cov-pct{font-size:1.3rem;font-weight:700;color:var(--gold);line-height:1;}
+.ph-cov-lbl{font-size:.62rem;color:var(--gray);text-transform:uppercase;letter-spacing:.06em;}
+.btn-action{background:var(--navy);color:var(--white);border:none;border-radius:8px;padding:.5rem .9rem;font-family:'DM Sans',sans-serif;font-size:.75rem;font-weight:600;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:.35rem;}
+.btn-action:hover{opacity:.9;}
+.btn-action.secondary{background:var(--gray-ll);color:var(--navy);}
+.btn-action.danger{background:var(--red-l);color:var(--red);}
+.btn-action.gold{background:var(--gold);color:var(--navy);}
+
+/* ── MONTH + WEEK SELECTOR ── */
+.controls-bar{display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap;}
+.month-select{border:1.5px solid var(--gray-l);border-radius:8px;padding:.5rem .85rem;font-family:'DM Sans',sans-serif;font-size:.82rem;color:var(--navy);background:var(--white);cursor:pointer;}
+.month-select:focus{outline:none;border-color:var(--navy);}
+
+/* ── CALENDAR ── */
+.week-block{margin-bottom:1rem;}
+.week-label{font-size:.68rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gray);margin-bottom:.5rem;padding:.35rem .75rem;background:var(--gray-ll);border-radius:6px;display:flex;justify-content:space-between;}
+.days-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:.5rem;}
+.day-card{background:var(--white);border-radius:var(--r2);overflow:hidden;cursor:pointer;border:1.5px solid var(--gray-l);transition:all .12s;min-height:100px;}
+.day-card:hover{border-color:var(--navy);box-shadow:0 2px 8px rgba(26,31,58,.1);}
+.day-card.future{opacity:.45;cursor:default;pointer-events:none;}
+.day-card.today{border-color:var(--gold);box-shadow:0 0 0 2px rgba(201,168,76,.2);}
+.day-hdr{background:var(--navy);color:var(--white);padding:.3rem .4rem;text-align:center;}
+.day-dow{font-size:.6rem;color:var(--gold);font-weight:700;letter-spacing:.04em;}
+.day-num{font-size:.95rem;font-weight:700;line-height:1.1;}
+.day-body{padding:.35rem;display:flex;flex-direction:column;align-items:center;gap:.25rem;}
+.day-photos{display:flex;gap:2px;justify-content:center;}
+.day-photo-thumb{width:22px;height:22px;border-radius:3px;object-fit:cover;border:1.5px solid var(--gray-l);}
+.day-photo-empty{width:22px;height:22px;border-radius:3px;background:var(--gray-ll);display:flex;align-items:center;justify-content:center;font-size:8px;color:var(--gray);}
+.day-status{font-size:.62rem;font-weight:700;padding:.15rem .4rem;border-radius:4px;text-align:center;width:100%;}
+.day-hora{font-size:.58rem;color:var(--gray);text-align:center;}
+.day-obs-text{font-size:.58rem;color:var(--gray);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%;}
+.day-empty{font-size:.62rem;color:var(--gray);text-align:center;padding:.5rem 0;}
+
+/* STATUS COLORS */
+.s-PRESENTE{background:var(--green-l);color:var(--green);}
+.s-AUSENTE{background:var(--red-l);color:var(--red);}
+.s-LIBRE{background:var(--blue-l);color:var(--blue);}
+.s-REPOSO{background:#fef3c7;color:#92400e;}
+.s-JUSTIFICADO{background:#ede9fe;color:#5b21b6;}
+.s-FERIADO{background:#ede9fe;color:#4a1d96;}
+.s-VACACIONES{background:#cffafe;color:#0e7490;}
+.s-MATERNIDAD{background:#fce7f3;color:#be185d;}
+.s-PERMISO{background:#fef3c7;color:#92400e;}
+.s-CAP{background:var(--blue-l);color:#1e3a8a;}
+.s-RENUNCIA{background:var(--gray-ll);color:var(--gray);}
+
+/* ── HOY VIEW ── */
+.hoy-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:.75rem;}
+.hoy-card{background:var(--white);border-radius:var(--r);border:1.5px solid var(--gray-l);overflow:hidden;}
+.hoy-card-hdr{padding:.6rem .85rem;display:flex;align-items:center;gap:.6rem;border-bottom:1px solid var(--gray-l);}
+.hoy-avatar{width:30px;height:30px;border-radius:50%;background:var(--navy);color:var(--white);font-size:.65rem;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.hoy-name{font-size:.8rem;font-weight:600;flex:1;}
+.hoy-type{font-size:.6rem;font-weight:700;padding:.1rem .35rem;border-radius:4px;}
+.hoy-body{padding:.6rem .85rem;display:flex;gap:.5rem;align-items:flex-start;}
+.hoy-photos{display:flex;gap:3px;}
+.hoy-photo{width:36px;height:36px;border-radius:5px;object-fit:cover;border:1.5px solid var(--gray-l);}
+.hoy-photo-empty{width:36px;height:36px;border-radius:5px;background:var(--gray-ll);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--gray);}
+.hoy-info{flex:1;}
+.hoy-status{font-size:.72rem;font-weight:700;padding:.2rem .5rem;border-radius:5px;display:inline-block;margin-bottom:.25rem;}
+.hoy-horas{font-size:.68rem;color:var(--gray);}
+.hoy-sin{font-size:.72rem;color:var(--gray);font-style:italic;padding:.25rem 0;}
+
+/* ── STATS ── */
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;margin-bottom:1rem;}
+.stat-card{background:var(--white);border-radius:var(--r);padding:.85rem 1rem;border:1.5px solid var(--gray-l);}
+.stat-num{font-size:1.6rem;font-weight:700;color:var(--navy);line-height:1;}
+.stat-lbl{font-size:.68rem;color:var(--gray);text-transform:uppercase;letter-spacing:.06em;margin-top:.2rem;}
+.stat-card.green .stat-num{color:var(--green);}
+.stat-card.red .stat-num{color:var(--red);}
+.stat-card.gold .stat-num{color:var(--gold);}
+
+/* ── MODALS ── */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;align-items:center;justify-content:center;}
+.overlay.open{display:flex;}
+.modal{background:var(--white);border-radius:var(--r);padding:1.5rem;width:min(500px,95vw);max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2);}
+.modal-sm{width:min(380px,95vw);}
+.modal-lg{width:min(680px,95vw);}
+.modal-title{font-size:1rem;font-weight:700;margin-bottom:1.25rem;}
+.modal-close{float:right;background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--gray);margin-top:-.2rem;}
+.field-group{margin-bottom:1rem;}
+.field-label{font-size:.68rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gray);display:block;margin-bottom:.35rem;}
+.field-input{width:100%;border:1.5px solid var(--gray-l);border-radius:8px;padding:.65rem .85rem;font-family:'DM Sans',sans-serif;font-size:.88rem;color:var(--navy);background:var(--white);}
+.field-input:focus{outline:none;border-color:var(--navy);}
+.field-select{width:100%;border:1.5px solid var(--gray-l);border-radius:8px;padding:.65rem .85rem;font-family:'DM Sans',sans-serif;font-size:.88rem;color:var(--navy);background:var(--white) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238a8ea8' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right .85rem center;-webkit-appearance:none;cursor:pointer;}
+.field-select:focus{outline:none;border-color:var(--navy);}
+.modal-actions{display:flex;gap:.65rem;justify-content:flex-end;margin-top:1.25rem;}
+.btn-cancel{padding:.65rem 1.1rem;border:1.5px solid var(--gray-l);border-radius:8px;background:var(--white);font-family:'DM Sans',sans-serif;font-size:.82rem;cursor:pointer;}
+.btn-save{padding:.65rem 1.25rem;border:none;border-radius:8px;background:var(--navy);color:var(--white);font-family:'DM Sans',sans-serif;font-size:.82rem;font-weight:700;cursor:pointer;}
+.btn-danger{background:var(--red-l);color:var(--red);border:none;border-radius:8px;padding:.65rem 1.1rem;font-family:'DM Sans',sans-serif;font-size:.82rem;cursor:pointer;}
+
+/* STATUS PILLS */
+.pills{display:flex;flex-wrap:wrap;gap:.4rem;}
+.pill{padding:.4rem .8rem;border-radius:20px;border:1.5px solid var(--gray-l);background:var(--white);font-size:.72rem;font-weight:600;cursor:pointer;color:var(--navy);transition:all .12s;}
+.pill:hover{border-color:var(--navy);}
+.pill.selected-PRESENTE{background:var(--green-l);color:var(--green);border-color:var(--green);}
+.pill.selected-AUSENTE{background:var(--red-l);color:var(--red);border-color:var(--red);}
+.pill.selected-LIBRE{background:var(--blue-l);color:var(--blue);border-color:var(--blue);}
+.pill.selected-REPOSO{background:#fef3c7;color:#92400e;border-color:#92400e;}
+.pill.selected-JUSTIFICADO{background:#ede9fe;color:#5b21b6;border-color:#5b21b6;}
+.pill.selected-FERIADO{background:#ede9fe;color:#4a1d96;border-color:#4a1d96;}
+.pill.selected-VACACIONES{background:#cffafe;color:#0e7490;border-color:#0e7490;}
+.pill.selected-MATERNIDAD{background:#fce7f3;color:#be185d;border-color:#be185d;}
+.pill.selected-PERMISO{background:#fef3c7;color:#92400e;border-color:#92400e;}
+.pill.selected-CAP{background:var(--blue-l);color:#1e3a8a;border-color:#1e3a8a;}
+.pill.selected-RENUNCIA{background:var(--gray-ll);color:var(--gray);border-color:var(--gray);}
+
+/* PHOTO */
+.photo-upload{border:2px dashed var(--gray-l);border-radius:10px;min-height:120px;display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;position:relative;background:var(--gray-ll);}
+.photo-upload:hover{border-color:var(--navy);}
+.photo-upload.has-photo{border-style:solid;border-color:var(--navy);}
+.photo-upload img{width:100%;max-height:200px;object-fit:cover;display:block;}
+.photo-hint{text-align:center;color:var(--gray);font-size:.78rem;}
+.photo-hint .ico{font-size:1.5rem;margin-bottom:.25rem;}
+.btn-remove-photo{position:absolute;top:.4rem;right:.4rem;background:rgba(26,31,58,.7);color:#fff;border:none;border-radius:5px;padding:.2rem .5rem;font-size:.65rem;cursor:pointer;}
+
+/* RESUMEN TABLE */
+.resumen-table{width:100%;border-collapse:collapse;background:var(--white);border-radius:var(--r);overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06);}
+.resumen-table th{background:var(--navy);color:var(--white);padding:.5rem .65rem;font-size:.68rem;font-weight:700;letter-spacing:.06em;text-align:center;}
+.resumen-table td{padding:.45rem .65rem;font-size:.75rem;border-bottom:1px solid var(--gray-l);text-align:center;}
+.resumen-table tr:last-child td{border:none;}
+.resumen-table tr:hover td{background:var(--gray-ll);}
+.resumen-table .td-name{text-align:left;font-weight:600;}
+
+/* HHEE */
+.hhee-table{width:100%;border-collapse:collapse;font-size:.78rem;}
+.hhee-table th{background:var(--navy);color:var(--white);padding:.5rem .65rem;font-size:.68rem;font-weight:700;}
+.hhee-table td{padding:.45rem .65rem;border-bottom:1px solid var(--gray-l);}
+.hhee-photo-thumb{width:36px;height:36px;object-fit:cover;border-radius:5px;cursor:pointer;}
+
+/* SPINNER */
+.spinner{width:16px;height:16px;border:2.5px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:inline-block;}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* TOAST */
+.toast{position:fixed;bottom:1.5rem;right:1.5rem;background:var(--navy);color:var(--white);padding:.65rem 1.1rem;border-radius:10px;font-size:.82rem;font-weight:500;z-index:999;transform:translateY(100px);opacity:0;transition:all .25s;box-shadow:0 4px 12px rgba(0,0,0,.2);}
+.toast.show{transform:translateY(0);opacity:1;}
+.toast.success{background:var(--green);}
+.toast.error{background:var(--red);}
+
+/* CIERRE VIEW */
+.cierre-section{background:var(--white);border-radius:var(--r);padding:1.25rem;margin-bottom:1rem;border:1.5px solid var(--gray-l);}
+.cierre-title{font-size:.88rem;font-weight:700;margin-bottom:.75rem;display:flex;align-items:center;gap:.5rem;}
+.cierre-desc{font-size:.78rem;color:var(--gray);margin-bottom:1rem;line-height:1.5;}
+.cierre-btns{display:flex;gap:.65rem;flex-wrap:wrap;}
+
+/* LOG */
+.log-box{background:#f8f9fa;border-radius:8px;padding:.85rem 1rem;font-size:.75rem;font-family:monospace;max-height:180px;overflow-y:auto;margin-top:.75rem;white-space:pre-wrap;}
+
+/* CONFIG */
+.config-section{background:var(--white);border-radius:var(--r);padding:1.25rem;margin-bottom:1rem;border:1.5px solid var(--gray-l);}
+.config-title{font-size:.88rem;font-weight:700;margin-bottom:.75rem;}
+
+/* IMPULSO BADGE */
+.impulso-banner{background:var(--yellow-l);border:1.5px solid var(--yellow);border-radius:8px;padding:.6rem 1rem;font-size:.78rem;color:#92400e;margin-bottom:.75rem;display:flex;align-items:center;gap:.5rem;}
+
+/* EMPTY STATE */
+.empty-state{text-align:center;padding:3rem 1rem;color:var(--gray);}
+.empty-state .ico{font-size:2.5rem;margin-bottom:.75rem;}
+.empty-state .msg{font-size:.88rem;}
+
+/* RESPONSIVE */
+@media(max-width:768px){
+  .sidebar{width:100%;position:relative;top:0;border-right:none;border-bottom:1px solid var(--gray-l);}
+  .main{margin-left:0;}
+  .app-body{flex-direction:column;}
+  .stats-row{grid-template-columns:repeat(2,1fr);}
+  .days-grid{grid-template-columns:repeat(4,1fr);}
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="hdr">
+  <div class="hdr-logo">HONOR <span>·</span> MARCACIONES</div>
+  <div class="hdr-dot"></div>
+  <div class="hdr-sync">
+    <div class="sync-dot" id="syncDot"></div>
+    <span id="syncLabel">Cargando...</span>
+  </div>
+  <button class="hdr-btn" onclick="openConfig()">⚙ Config</button>
+</header>
+
+<!-- NAV TABS -->
+<nav class="nav-tabs">
+  <div class="nav-tab active" onclick="switchTab('hoy')" id="tab-hoy">📊 Hoy</div>
+  <div class="nav-tab" onclick="switchTab('nomina')" id="tab-nomina">👥 Nómina</div>
+  <div class="nav-tab" onclick="switchTab('impulsos')" id="tab-impulsos">⚡ Impulsos</div>
+  <div class="nav-tab" onclick="switchTab('hhee')" id="tab-hhee">⏱ HHEE</div>
+  <div class="nav-tab" onclick="switchTab('cierre')" id="tab-cierre">📁 Cierre</div>
+</nav>
+
+<!-- APP BODY -->
+<div class="app-body">
+
+<!-- ══════════════════ SIDEBAR ══════════════════ -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-top">
+    <div class="sidebar-section" id="sidebarTitle">Equipo</div>
+    <div class="sidebar-search">
+      <span class="s-ico">🔍</span>
+      <input type="text" id="sidebarSearch" placeholder="Buscar..." oninput="renderSidebar()">
+    </div>
+    <div class="filter-chips" id="filterChips">
+      <div class="chip active" data-filter="activos" onclick="setSidebarFilter('activos')">Activos</div>
+      <div class="chip" data-filter="todos" onclick="setSidebarFilter('todos')">Todos</div>
+      <div class="chip" data-filter="inactivos" onclick="setSidebarFilter('inactivos')">Inactivos</div>
+    </div>
+  </div>
+  <div id="personList"></div>
+  <button class="sidebar-add-btn" id="sidebarAddBtn" onclick="openAddPerson()">+ Agregar persona</button>
+</aside>
+
+<!-- ══════════════════ MAIN CONTENT ══════════════════ -->
+<main class="main">
+
+<!-- ── HOY ── -->
+<div id="view-hoy">
+  <div class="stats-row" id="statsRow"></div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.65rem;gap:1rem">
+    <div style="font-size:.82rem;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.06em" id="hoyLabel"></div>
+    <div style="position:relative;max-width:260px;flex:1">
+      <span style="position:absolute;left:.75rem;top:50%;transform:translateY(-50%);color:var(--gray)">🔍</span>
+      <input type="text" id="hoySearch" placeholder="Buscar promotor..." oninput="renderHoy()"
+        style="width:100%;border:1.5px solid var(--gray-l);border-radius:8px;padding:.5rem .75rem .5rem 2.25rem;font-family:'DM Sans',sans-serif;font-size:.8rem;color:var(--navy);background:var(--white)">
+    </div>
+  </div>
+  <div class="hoy-grid" id="hoyGrid"></div>
+</div>
+
+<!-- ── NÓMINA ── -->
+<div id="view-nomina" style="display:none">
+  <div id="nominaPersonHdr" style="display:none"></div>
+  <div id="nominaSearchBar" style="margin-bottom:.75rem;position:relative;max-width:320px">
+    <span style="position:absolute;left:.75rem;top:50%;transform:translateY(-50%);color:var(--gray)">🔍</span>
+    <input type="text" id="nominaSearch" placeholder="Buscar promotor..." oninput="filterNomina()"
+      style="width:100%;border:1.5px solid var(--gray-l);border-radius:8px;padding:.5rem .75rem .5rem 2.25rem;font-family:'DM Sans',sans-serif;font-size:.8rem;color:var(--navy);background:var(--white)">
+    <div id="nominaDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--white);border:1.5px solid var(--gray-l);border-radius:8px;max-height:200px;overflow-y:auto;z-index:50;box-shadow:0 4px 12px rgba(0,0,0,.1);margin-top:.25rem"></div>
+  </div>
+  <div id="nominaContent">
+    <div class="empty-state"><div class="ico">👥</div><div class="msg">Seleccioná una persona del listado o buscá por nombre</div></div>
+  </div>
+</div>
+
+<!-- ── IMPULSOS ── -->
+<div id="view-impulsos" style="display:none">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+    <div>
+      <div style="font-size:1rem;font-weight:700">Equipos de Impulso</div>
+      <div style="font-size:.78rem;color:var(--gray);margin-top:.15rem">Promotores ocasionales por campaña</div>
+    </div>
+    <div style="display:flex;gap:.5rem">
+      <button class="btn-action secondary" onclick="openAddCampania()">+ Nueva campaña</button>
+    </div>
+  </div>
+  <div id="impulsosContent"></div>
+</div>
+
+<!-- ── HHEE ── -->
+<div id="view-hhee" style="display:none">
+  <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
+    <select class="month-select" id="monthSelectHhee" onchange="renderHheeView()"></select>
+    <select class="month-select" id="personFilterHhee" onchange="renderHheeView()">
+      <option value="all">Todos los promotores</option>
+    </select>
+    <button class="btn-action" onclick="openHheeModal(null)" style="background:var(--green)">+ Agregar HHEE</button>
+    <button class="btn-action secondary" onclick="exportHheeExcel()">⬇ Excel HHEE</button>
+    <button class="btn-action danger" onclick="generateHheePDF()">⬇ PDF HHEE</button>
+  </div>
+  <div id="hheeContent"></div>
+</div>
+
+<!-- ── CIERRE ── -->
+<div id="view-cierre" style="display:none">
+  <div style="font-size:1rem;font-weight:700;margin-bottom:1rem">📁 Cierre de Mes</div>
+
+  <div class="cierre-section">
+    <div class="cierre-title">📊 Exportar Planilla</div>
+    <div class="cierre-desc">Generá el Excel de asistencia del mes con todos los estados por persona. Incluye campo, oficina e impulsos.</div>
+    <div style="margin-bottom:.75rem">
+      <select class="month-select" id="cierreMonth"></select>
+    </div>
+    <div class="cierre-btns">
+      <button class="btn-action secondary" onclick="exportExcelCierre('campo')">⬇ Excel Nómina Campo</button>
+      <button class="btn-action secondary" onclick="exportExcelCierre('oficina')">⬇ Excel Nómina Oficina</button>
+      <button class="btn-action secondary" onclick="exportExcelCierre('todos')">⬇ Excel Completo</button>
+    </div>
+  </div>
+
+  <div class="cierre-section">
+    <div class="cierre-title">📁 Crear Carpetas en Drive</div>
+    <div class="cierre-desc">Crea la estructura de carpetas en Google Drive para el mes. Después subís los PDFs manualmente a cada carpeta.</div>
+    <div style="margin-bottom:.75rem;display:flex;gap:.75rem;align-items:center;flex-wrap:wrap">
+      <select class="month-select" id="cierreMonthDrive"></select>
+      <select class="month-select" id="cierrePersonaDrive">
+        <option value="todos">Todos</option>
+      </select>
+    </div>
+    <div class="cierre-btns">
+      <button class="btn-action gold" id="btnCrearCarpetas" onclick="crearCarpetasDrive()">📁 Crear carpetas en Drive</button>
+    </div>
+    <div class="log-box" id="driveLog" style="display:none"></div>
+  </div>
+
+  <div class="cierre-section">
+    <div class="cierre-title">🗂 Resumen de Asistencia</div>
+    <div class="cierre-desc">Vista general del mes con todos los promotores y sus estados.</div>
+    <button class="btn-action secondary" onclick="switchTab('nomina');switchView('resumen')">Ver Resumen →</button>
+  </div>
+</div>
+
+</main>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- ══════════════════ MODALS ══════════════════ -->
+
+<!-- Day Modal -->
+<div class="overlay" id="dayOverlay" onclick="closeDayModal()">
+<div class="modal" onclick="event.stopPropagation()">
+  <button class="modal-close" onclick="closeDayModal()">✕</button>
+  <div class="modal-title" id="dayModalTitle">Registrar día</div>
+  <div style="font-size:.78rem;color:var(--gray);margin-top:-.75rem;margin-bottom:1rem" id="dayModalDate"></div>
+
+  <div class="field-group">
+    <div class="field-label">Estado</div>
+    <div class="pills" id="statusPills"></div>
+  </div>
+
+  <div class="field-group">
+    <div class="field-label">Observación</div>
+    <textarea class="field-input" id="obsInput" rows="2" placeholder="Notas adicionales..."></textarea>
+  </div>
+
+  <!-- Fotos de promotores -->
+  <div id="promoPhotosSection" style="display:none">
+    <div class="field-label" style="margin-bottom:.5rem">Fotos de marcación</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem;margin-bottom:.75rem">
+      <div style="text-align:center">
+        <div style="font-size:.65rem;font-weight:700;color:var(--green);margin-bottom:.3rem">🟢 ENTRADA</div>
+        <div id="photoEntradaWrap"></div>
+        <div id="horaEntradaLbl" style="font-size:.65rem;color:var(--gray);margin-top:.2rem"></div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:.65rem;font-weight:700;color:var(--yellow);margin-bottom:.3rem">🟡 ALMUERZO</div>
+        <div id="photoAlmuerzoWrap"></div>
+        <div id="horaAlmuerzoLbl" style="font-size:.65rem;color:var(--gray);margin-top:.2rem"></div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:.65rem;font-weight:700;color:var(--red);margin-bottom:.3rem">🔴 SALIDA</div>
+        <div id="photoSalidaWrap"></div>
+        <div id="horaSalidaLbl" style="font-size:.65rem;color:var(--gray);margin-top:.2rem"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Foto manual -->
+  <div class="field-group">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.35rem">
+      <div class="field-label" style="margin:0">Foto manual</div>
+      <button id="btnDelPhoto" onclick="clearDayPhoto()" style="display:none;background:none;border:none;font-size:.7rem;color:var(--gray);cursor:pointer">✕ Quitar</button>
+    </div>
+    <div class="photo-upload" id="dayPhotoZone" onclick="document.getElementById('dayPhotoInput').click()">
+      <div class="photo-hint"><div class="ico">📷</div><div>Click para subir foto</div></div>
+    </div>
+    <input type="file" id="dayPhotoInput" accept="image/*" style="display:none" onchange="handleDayPhoto(event)">
+  </div>
+
+  <div class="modal-actions">
+    <button class="btn-cancel" onclick="closeDayModal()">Cancelar</button>
+    <button class="btn-danger" onclick="clearDay()">🗑 Limpiar</button>
+    <button class="btn-save" onclick="saveDay()">Guardar</button>
+  </div>
+</div>
+</div>
+
+<!-- Add/Edit Person Modal -->
+<div class="overlay" id="personOverlay" onclick="closePersonModal()">
+<div class="modal modal-sm" onclick="event.stopPropagation()">
+  <button class="modal-close" onclick="closePersonModal()">✕</button>
+  <div class="modal-title" id="personModalTitle">Agregar persona</div>
+  <input type="hidden" id="editPersonId">
+  <div class="field-group">
+    <label class="field-label">Nombre completo</label>
+    <input class="field-input" id="pName" type="text" placeholder="APELLIDO, NOMBRE">
+  </div>
+  <div class="field-group">
+    <label class="field-label">Cargo</label>
+    <input class="field-input" id="pRole" type="text" placeholder="Cargo">
+  </div>
+  <div class="field-group">
+    <label class="field-label">CI</label>
+    <input class="field-input" id="pCI" type="text" placeholder="Número de CI">
+  </div>
+  <div class="field-group">
+    <label class="field-label">Tipo</label>
+    <select class="field-select" id="pType">
+      <option value="campo">Campo (marca con foto)</option>
+      <option value="oficina">Oficina (sin foto)</option>
+    </select>
+  </div>
+  <div class="modal-actions">
+    <button class="btn-cancel" onclick="closePersonModal()">Cancelar</button>
+    <button class="btn-save" onclick="savePerson()">Guardar</button>
+  </div>
+</div>
+</div>
+
+<!-- Recibo Modal -->
+<div class="overlay" id="reciboOverlay" onclick="closeRecibo()">
+<div class="modal" onclick="event.stopPropagation()">
+  <button class="modal-close" onclick="closeRecibo()">✕</button>
+  <div class="modal-title" id="reciboTitle">Recibo de remuneraciones</div>
+  <div class="photo-upload" id="reciboPhotoZone" onclick="document.getElementById('reciboPhotoInput').click()">
+    <div class="photo-hint"><div class="ico">📷</div><div>Click para subir foto del recibo</div></div>
+  </div>
+  <input type="file" id="reciboPhotoInput" accept="image/*" style="display:none" onchange="handleReciboPhoto(event)">
+  <div class="modal-actions">
+    <button class="btn-cancel" onclick="closeRecibo()">Cancelar</button>
+    <button class="btn-save" onclick="saveRecibo()">Guardar</button>
+  </div>
+</div>
+</div>
+
+<!-- HHEE Modal -->
+<div class="overlay" id="hheeOverlay" onclick="closeHheeModal()">
+<div class="modal modal-lg" onclick="event.stopPropagation()">
+  <button class="modal-close" onclick="closeHheeModal()">✕</button>
+  <div class="modal-title" id="hheeModalTitle">Horas Extra</div>
+  <input type="hidden" id="hheeEditId">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+    <div class="field-group">
+      <label class="field-label">Promotor</label>
+      <select class="field-select" id="hheePerson"></select>
+    </div>
+    <div class="field-group">
+      <label class="field-label">Fecha</label>
+      <input class="field-input" id="hheeFecha" type="date">
+    </div>
+    <div class="field-group">
+      <label class="field-label">Sucursal</label>
+      <input class="field-input" id="hheeSucursal" type="text">
+    </div>
+    <div class="field-group">
+      <label class="field-label">Día</label>
+      <input class="field-input" id="hheeDia" type="text">
+    </div>
+    <div class="field-group">
+      <label class="field-label">Hora entrada</label>
+      <input class="field-input" id="hheeEntrada" type="time">
+    </div>
+    <div class="field-group">
+      <label class="field-label">Hora salida</label>
+      <input class="field-input" id="hheeSalida" type="time">
+    </div>
+    <div class="field-group">
+      <label class="field-label">HS Diurnas</label>
+      <input class="field-input" id="hheeDiurno" type="text" placeholder="0:00">
+    </div>
+    <div class="field-group">
+      <label class="field-label">HS Nocturnas</label>
+      <input class="field-input" id="hheeNocturno" type="text" placeholder="0:00">
+    </div>
+  </div>
+  <div class="field-group">
+    <label class="field-label">Total horas</label>
+    <input class="field-input" id="hheeTotal" type="text" placeholder="0:00">
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+    <div class="field-group">
+      <label class="field-label">Foto entrada</label>
+      <div class="photo-upload" id="hheePhotoEntZone" onclick="document.getElementById('hheePhotoEnt').click()" style="min-height:80px">
+        <div class="photo-hint"><div class="ico">📷</div></div>
+      </div>
+      <input type="file" id="hheePhotoEnt" accept="image/*" style="display:none" onchange="handleHheePhoto(event,'entrada')">
+    </div>
+    <div class="field-group">
+      <label class="field-label">Foto salida</label>
+      <div class="photo-upload" id="hheePhotoSalZone" onclick="document.getElementById('hheePhotoSal').click()" style="min-height:80px">
+        <div class="photo-hint"><div class="ico">📷</div></div>
+      </div>
+      <input type="file" id="hheePhotoSal" accept="image/*" style="display:none" onchange="handleHheePhoto(event,'salida')">
+    </div>
+  </div>
+  <div class="modal-actions">
+    <button class="btn-cancel" onclick="closeHheeModal()">Cancelar</button>
+    <button class="btn-save" onclick="saveHhee()">Guardar</button>
+  </div>
+</div>
+</div>
+
+<!-- Campaña Impulso Modal -->
+<div class="overlay" id="campaniaOverlay" onclick="closeCampaniaModal()">
+<div class="modal modal-sm" onclick="event.stopPropagation()">
+  <button class="modal-close" onclick="closeCampaniaModal()">✕</button>
+  <div class="modal-title">Nueva campaña de impulso</div>
+  <div class="field-group">
+    <label class="field-label">Nombre de campaña</label>
+    <input class="field-input" id="campaniaName" type="text" placeholder="Ej: Impulso HONOR Agosto 2026">
+  </div>
+  <div class="field-group">
+    <label class="field-label">Cliente</label>
+    <input class="field-input" id="campaniaCliente" type="text" placeholder="HONOR">
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+    <div class="field-group">
+      <label class="field-label">Fecha inicio</label>
+      <input class="field-input" id="campaniaInicio" type="date">
+    </div>
+    <div class="field-group">
+      <label class="field-label">Fecha fin</label>
+      <input class="field-input" id="campaniaFin" type="date">
+    </div>
+  </div>
+  <div class="modal-actions">
+    <button class="btn-cancel" onclick="closeCampaniaModal()">Cancelar</button>
+    <button class="btn-save" onclick="saveCampania()">Crear campaña</button>
+  </div>
+</div>
+</div>
+
+<!-- Config Modal -->
+<div class="overlay" id="configOverlay" onclick="closeConfig()">
+<div class="modal modal-lg" onclick="event.stopPropagation()">
+  <button class="modal-close" onclick="closeConfig()">✕</button>
+  <div class="modal-title">⚙ Configuración</div>
+
+  <div class="config-section">
+    <div class="config-title">🔗 URL del Worker (servidor)</div>
+    <input class="field-input" id="workerUrlInput" type="text" placeholder="https://honor-marcaciones.masmarkahonor.workers.dev" style="margin-bottom:.5rem">
+    <div style="font-size:.72rem;color:var(--gray)">Se guarda automáticamente en el navegador.</div>
+  </div>
+
+  <div class="config-section">
+    <div class="config-title">👥 Lista de promotores (app de marcaciones)</div>
+    <div style="font-size:.72rem;color:var(--gray);margin-bottom:.65rem">Cuando agregás personas nuevas en el sistema, copiá este código y reemplazalo en la app de promotores (buscá "const PERSONS = [").</div>
+    <button class="btn-save" onclick="exportPersonsList()" style="margin-bottom:.5rem">📋 Copiar lista actualizada</button>
+    <div id="personsExportLog" style="display:none;font-size:.7rem;color:var(--green);margin-top:.35rem">✓ Lista copiada al portapapeles</div>
+  </div>
+
+  <div class="config-section">
+    <div class="config-title">📥 Importar marcaciones</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:.75rem">
+      <div>
+        <label class="field-label">Desde</label>
+        <input class="field-input" id="syncDesde" type="date">
+      </div>
+      <div>
+        <label class="field-label">Hasta</label>
+        <input class="field-input" id="syncHasta" type="date">
+      </div>
+    </div>
+    <button class="btn-save" id="syncBtn" onclick="runImport()">Importar ahora</button>
+    <div class="log-box" id="syncLog" style="display:none;margin-top:.75rem"></div>
+  </div>
+
+  <div class="modal-actions">
+    <button class="btn-cancel" onclick="closeConfig()">Cerrar</button>
+    <button class="btn-save" onclick="saveConfig()">Guardar</button>
+  </div>
+</div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════
+// CONFIG
+// ══════════════════════════════════════════════
+const WORKER_URL = 'https://honor-marcaciones.masmarkahonor.workers.dev';
+const GAS_SECRET = 'HONOR2026';
+
+const STATUS_LABELS = {
+  PRESENTE:'OK', AUSENTE:'AUSENTE', LIBRE:'DIA LIBRE', REPOSO:'REPOSO',
+  JUSTIFICADO:'JUSTIFICADO', FERIADO:'FERIADO', VACACIONES:'VACACIONES',
+  MATERNIDAD:'MATERNIDAD', PERMISO:'PERMISO', CAP:'CAP', RENUNCIA:'RENUNCIA'
+};
+
+const INITIAL_PERSONS = [
+  {id:'P001',name:'CARABAJAL ORTIZ, RUTH ELISABETH',role:'PROMOTER JUNIOR',ci:'',type:'campo'},
+  {id:'P002',name:'DALLAS FONTANA ESTIGARRIBIA, RUTH ARACELY',role:'PROMOTER JUNIOR',ci:'',type:'campo'},
+  {id:'P003',name:'IRENE PAOLA ESCOBAR TOLEDO',role:'MERCHANDISER',ci:'',type:'campo'},
+  {id:'P004',name:'ROMAN LEZCANO, JESUS EDUARDO',role:'PROMOTER JUNIOR',ci:'',type:'campo'},
+  {id:'P005',name:'ACOSTA PAIVA, KEVIN MIGUEL',role:'MERCHANDISER',ci:'',type:'campo'},
+  {id:'P006',name:'BRITEZ VAZQUEZ, MARCOS EMMANUEL',role:'PROMOTER SENIOR',ci:'5309703',type:'campo'},
+  {id:'P007',name:'CABRERA PEÑA, LIZI SOELI',role:'PROMOTER JUNIOR',ci:'',type:'campo'},
+  {id:'P008',name:'CABRERA SANTACRUZ, ALEXIS RAMON',role:'PROMOTER JUNIOR',ci:'5388298',type:'campo'},
+  {id:'P009',name:'MELGAREJO DOMINGUEZ, DEBORA NOEMI',role:'PROMOTER JUNIOR',ci:'',type:'campo'},
+  {id:'P010',name:'OZUNA MARTINEZ, SORAYA NAYARA',role:'PROMOTER SENIOR',ci:'',type:'campo'},
+  {id:'P011',name:'ROJAS BOGADO, JUAN JOSE MISSAC',role:'MERCHANDISER',ci:'',type:'campo'},
+  {id:'P012',name:'ROJAS GAMARRA, AYELEN YAMILA',role:'PROMOTER SENIOR',ci:'',type:'campo'},
+  {id:'P013',name:'RUIZ DIAZ GUERRERO, ALVARO SEBASTIAN',role:'PROMOTER SENIOR',ci:'',type:'campo'},
+  {id:'P014',name:'JUSTIN SEBASTIAN GARAY VERGARA',role:'PROMOTER JUNIOR',ci:'',type:'campo'},
+  {id:'P015',name:'QUINTANA VEGA, IHARA BELEN',role:'PROMOTER JUNIOR',ci:'',type:'campo'},
+  {id:'P016',name:'ARNALDO DE JESUS NOGUERA NUÑEZ',role:'MERCHANDISER',ci:'',type:'campo'},
+];
+
+// ══════════════════════════════════════════════
+// INDEXEDDB
+// ══════════════════════════════════════════════
+let db;
+function initDB() {
+  return new Promise((res,rej) => {
+    const req = indexedDB.open('HonorSistemav2', 1);
+    req.onupgradeneeded = e => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains('persons'))   d.createObjectStore('persons',   {keyPath:'id'});
+      if (!d.objectStoreNames.contains('days'))      d.createObjectStore('days',      {keyPath:'key'});
+      if (!d.objectStoreNames.contains('hhee'))      d.createObjectStore('hhee',      {keyPath:'id'});
+      if (!d.objectStoreNames.contains('receipts'))  d.createObjectStore('receipts',  {keyPath:'key'});
+      if (!d.objectStoreNames.contains('campanias')) d.createObjectStore('campanias', {keyPath:'id'});
+    };
+    req.onsuccess = e => { db = e.target.result; res(); };
+    req.onerror = () => rej('DB error');
+  });
+}
+const dbGet    = (s,k)   => new Promise((r,j) => { const t=db.transaction(s,'readonly'); const q=t.objectStore(s).get(k); q.onsuccess=()=>r(q.result); q.onerror=j; });
+const dbPut    = (s,v)   => new Promise((r,j) => { const t=db.transaction(s,'readwrite'); const q=t.objectStore(s).put(v); q.onsuccess=()=>r(); q.onerror=j; });
+const dbGetAll = (s)     => new Promise((r,j) => { const t=db.transaction(s,'readonly'); const q=t.objectStore(s).getAll(); q.onsuccess=()=>r(q.result); q.onerror=j; });
+const dbDelete = (s,k)   => new Promise((r,j) => { const t=db.transaction(s,'readwrite'); const q=t.objectStore(s).delete(k); q.onsuccess=()=>r(); q.onerror=j; });
+
+// ══════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════
+let persons = [];
+let campanias = [];
+let currentTab = 'hoy';
+let currentView = 'calendario';
+let selectedPersonId = null;
+let sidebarFilter = 'activos';
+let currentYm = '';
+let autoSyncTimer = null;
+
+// Modal state
+let modalState = { personId:null, date:null, status:null, obs:'', photoData:null };
+let hheeState  = { photoEntrada:null, photoSalida:null };
+let reciboState = { photoData:null };
+
+// ══════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════
+async function init() {
+  await initDB();
+
+  // Load persons from Worker (Sheet) first, fallback to local
+  try {
+    const workerUrl = localStorage.getItem('workerUrl') || WORKER_URL;
+    const res = await fetch(workerUrl + '/promotores?key=' + GAS_SECRET);
+    const data = await res.json();
+    if (data.ok && data.promotores.length > 0) {
+      // Merge with existing (preserve inactive flags and manual overrides)
+      const existing = await dbGetAll('persons');
+      const existingMap = {};
+      existing.forEach(p => existingMap[p.id] = p);
+      persons = data.promotores.map(p => ({
+        ...p,
+        inactive: existingMap[p.id]?.inactive || false
+      }));
+      for (const p of persons) await dbPut('persons', p);
+    } else {
+      throw new Error('No promotores from worker');
+    }
+  } catch(e) {
+    // Fallback to local DB
+    let stored = await dbGetAll('persons');
+    const seen = new Set();
+    stored = stored.filter(p => { if(seen.has(p.id)) return false; seen.add(p.id); return true; });
+    if (stored.length === 0) {
+      for (const p of INITIAL_PERSONS) await dbPut('persons', p);
+      persons = [...INITIAL_PERSONS];
+    } else {
+      persons = stored;
+    }
+  }
+
+  // Load campanias
+  campanias = await dbGetAll('campanias');
+
+  // Set current month
+  const now = new Date();
+  currentYm = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+
+  // Populate month selectors
+  populateMonthSelects();
+
+  // Config
+  const savedUrl = localStorage.getItem('workerUrl') || WORKER_URL;
+  document.getElementById('workerUrlInput').value = savedUrl;
+
+  // Sync dates
+  const desde = new Date(now.getFullYear(), now.getMonth()-1, 1).toISOString().slice(0,10);
+  document.getElementById('syncDesde').value = desde;
+  document.getElementById('syncHasta').value = now.toISOString().slice(0,10);
+
+  // HHEE persons
+  populateHheePersons();
+
+  // Render
+  renderSidebar();
+  renderHoy();
+
+  // Auto-sync
+  startAutoSync();
+}
+
+function populateMonthSelects() {
+  const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Setiembre','Octubre','Noviembre','Diciembre'];
+  const ids = ['monthSelectHhee','cierreMonth','cierreMonthDrive'];
+  const now = new Date();
+  ids.forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    sel.innerHTML = '';
+    for (let m = 0; m < 12; m++) {
+      const ym = now.getFullYear() + '-' + String(m+1).padStart(2,'0');
+      const opt = document.createElement('option');
+      opt.value = ym;
+      opt.textContent = MONTHS[m] + ' ' + now.getFullYear();
+      if (m === now.getMonth()) opt.selected = true;
+      sel.appendChild(opt);
+    }
+  });
+}
+
+function populateHheePersons() {
+  const sel = document.getElementById('hheePerson');
+  sel.innerHTML = '';
+  const allP = persons.filter(p => !p.inactive);
+  allP.forEach(p => {
+    const o = document.createElement('option');
+    o.value = p.id; o.textContent = formatName(p.name);
+    sel.appendChild(o);
+  });
+  // Also personFilterHhee
+  const sel2 = document.getElementById('personFilterHhee');
+  sel2.innerHTML = '<option value="all">Todos</option>';
+  allP.forEach(p => {
+    const o = document.createElement('option');
+    o.value = p.id; o.textContent = formatName(p.name);
+    sel2.appendChild(o);
+  });
+  // cierre persona
+  const sel3 = document.getElementById('cierrePersonaDrive');
+  sel3.innerHTML = '<option value="todos">Todos</option>';
+  allP.forEach(p => {
+    const o = document.createElement('option');
+    o.value = p.id; o.textContent = formatName(p.name);
+    sel3.appendChild(o);
+  });
+}
+
+// ══════════════════════════════════════════════
+// TABS
+// ══════════════════════════════════════════════
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-'+tab).classList.add('active');
+  document.querySelectorAll('[id^="view-"]').forEach(v => v.style.display='none');
+  document.getElementById('view-'+tab).style.display = 'block';
+
+  const sidebar = document.getElementById('sidebar');
+  const sidebarTitle = document.getElementById('sidebarTitle');
+  const addBtn = document.getElementById('sidebarAddBtn');
+
+  if (tab === 'hoy') {
+    sidebar.style.display = 'flex';
+    sidebarTitle.textContent = 'Equipo';
+    addBtn.style.display = 'none';
+    renderHoy();
+  } else if (tab === 'nomina') {
+    sidebar.style.display = 'flex';
+    sidebarTitle.textContent = 'Nómina';
+    addBtn.style.display = 'block';
+    addBtn.textContent = '+ Agregar persona';
+    addBtn.onclick = openAddPerson;
+    renderSidebar();
+    if (selectedPersonId) renderNominaForPerson(selectedPersonId);
+  } else if (tab === 'impulsos') {
+    sidebar.style.display = 'none';
+    renderImpulsos();
+  } else if (tab === 'hhee') {
+    sidebar.style.display = 'none';
+    renderHheeView();
+  } else if (tab === 'cierre') {
+    sidebar.style.display = 'none';
+  }
+}
+
+function switchView(v) { currentView = v; }
+
+// ══════════════════════════════════════════════
+// SIDEBAR
+// ══════════════════════════════════════════════
+function setSidebarFilter(f) {
+  sidebarFilter = f;
+  document.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c.dataset.filter === f));
+  renderSidebar();
+}
+
+function initials(name) {
+  return name.replace(/,/g,' ').split(/\s+/).filter(Boolean).slice(0,2).map(p=>p[0]).join('').toUpperCase();
+}
+
+async function exportPersonsList() {
+  const allPersons = await dbGetAll('persons');
+  const active = allPersons.filter(p => !p.inactive);
+  const lines = active.map(p => 
+    `  {id:'${p.id}',name:'${p.name}',role:'${p.role}',ci:'${p.ci||''}'},`
+  ).join('
+');
+  const code = 'const PERSONS = [
+' + lines + '
+];';
+  try {
+    await navigator.clipboard.writeText(code);
+    document.getElementById('personsExportLog').style.display = 'block';
+    setTimeout(() => document.getElementById('personsExportLog').style.display = 'none', 3000);
+  } catch(e) {
+    prompt('Copiá este código:', code);
+  }
+}
+
+function formatName(name) {
+  if (name.includes(',')) {
+    const parts = name.split(',');
+    return parts[1].trim() + ' ' + parts[0].trim();
+  }
+  return name;
+}
+  return toTitle(name);
+}
+
+async function renderSidebar() {
+  const q = (document.getElementById('sidebarSearch').value||'').toLowerCase();
+  const list = document.getElementById('personList');
+  list.innerHTML = '';
+
+  const nowPersons = persons.filter(p => {
+    if (sidebarFilter === 'activos' && p.inactive) return false;
+    if (sidebarFilter === 'inactivos' && !p.inactive) return false;
+    if (q && !p.name.toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  for (const p of nowPersons) {
+    const cov = await getCoverage(p.id, currentYm);
+    const typeLabel = p.type === 'oficina' ? '🏢' : p.type === 'impulso' ? '⚡' : '📍';
+    const div = document.createElement('div');
+    div.className = 'person-item' + (p.id === selectedPersonId ? ' active' : '');
+    div.innerHTML = `
+      <div class="p-avatar">${initials(p.name)}</div>
+      <div class="p-info">
+        <div class="p-name">${formatName(p.name)}</div>
+        <div class="p-role">${typeLabel} ${p.role}</div>
+      </div>
+      ${cov !== null ? `<div class="p-cov">${cov}%</div>` : ''}
+    `;
+    div.onclick = () => selectPerson(p.id);
+    list.appendChild(div);
+  }
+}
+
+async function selectPerson(id) {
+  selectedPersonId = id;
+  if (currentTab === 'hoy' || currentTab === 'nomina') {
+    if (currentTab === 'hoy') switchTab('nomina');
+    renderSidebar();
+    renderNominaForPerson(id);
+  }
+}
+
+// ══════════════════════════════════════════════
+// HOY
+// ══════════════════════════════════════════════
+async function renderHoy() {
+  const now = new Date();
+  const today = now.toISOString().slice(0,10);
+  const DAYS = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  const MONTHS = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','setiembre','octubre','noviembre','diciembre'];
+
+  document.getElementById('hoyLabel').textContent =
+    DAYS[now.getDay()] + ', ' + now.getDate() + ' de ' + MONTHS[now.getMonth()] + ' ' + now.getFullYear();
+
+  const hoyQ = (document.getElementById('hoySearch')?.value||'').toLowerCase();
+  const activePers = persons.filter(p => !p.inactive && (!hoyQ || p.name.toLowerCase().includes(hoyQ)));
+  let presentes = 0, ausentes = 0, sinReg = 0;
+
+  const grid = document.getElementById('hoyGrid');
+  grid.innerHTML = '';
+
+  for (const p of activePers) {
+    const rec = await dbGet('days', p.id + '_' + today);
+    const status = rec?.status || null;
+    if (status === 'PRESENTE') presentes++;
+    else if (status === 'AUSENTE') ausentes++;
+    else sinReg++;
+
+    const fotoE = rec?.fotoEntrada || rec?.photoData || null;
+    const fotoA = rec?.fotoAlmuerzo || null;
+    const fotoS = rec?.fotoSalida || null;
+
+    const typeClass = p.type === 'oficina' ? 'p-type-oficina' : p.type === 'impulso' ? 'p-type-impulso' : 'p-type-campo';
+    const typeLbl = p.type === 'oficina' ? 'Oficina' : p.type === 'impulso' ? 'Impulso' : 'Campo';
+
+    const card = document.createElement('div');
+    card.className = 'hoy-card';
+    card.innerHTML = `
+      <div class="hoy-card-hdr">
+        <div class="hoy-avatar">${initials(p.name)}</div>
+        <div class="hoy-name">${formatName(p.name)}</div>
+        <div class="p-type-badge ${typeClass}">${typeLbl}</div>
+      </div>
+      <div class="hoy-body">
+        ${status ? `
+          <div class="hoy-photos">
+            ${fotoE ? `<img class="hoy-photo" src="${fotoE}" onclick="window.open('${fotoE}','_blank')">` : p.type!=='oficina' ? `<div class="hoy-photo-empty">📷</div>` : ''}
+            ${fotoA ? `<img class="hoy-photo" src="${fotoA}" onclick="window.open('${fotoA}','_blank')">` : ''}
+            ${fotoS ? `<img class="hoy-photo" src="${fotoS}" onclick="window.open('${fotoS}','_blank')">` : ''}
+          </div>
+          <div class="hoy-info">
+            <div class="hoy-status s-${status}">${STATUS_LABELS[status]||status}</div>
+            ${rec?.horaEntrada ? `<div class="hoy-horas">🟢 ${rec.horaEntrada}${rec.horaSalida?' 🔴 '+rec.horaSalida:''}</div>` : ''}
+            ${rec?.obs ? `<div class="hoy-horas" style="color:var(--gray)">${rec.obs.slice(0,40)}</div>` : ''}
+          </div>
+        ` : `<div class="hoy-sin">Sin registrar hoy</div>`}
+      </div>
+    `;
+    card.onclick = () => { selectPerson(p.id); };
+    grid.appendChild(card);
+  }
+
+  // Stats
+  document.getElementById('statsRow').innerHTML = `
+    <div class="stat-card green"><div class="stat-num">${presentes}</div><div class="stat-lbl">Presentes</div></div>
+    <div class="stat-card red"><div class="stat-num">${ausentes}</div><div class="stat-lbl">Ausentes</div></div>
+    <div class="stat-card"><div class="stat-num">${sinReg}</div><div class="stat-lbl">Sin registrar</div></div>
+    <div class="stat-card gold"><div class="stat-num">${activePers.length}</div><div class="stat-lbl">Total equipo</div></div>
+  `;
+}
+
+// ══════════════════════════════════════════════
+// NÓMINA — render for person
+// ══════════════════════════════════════════════
+async function renderNominaForPerson(pid) {
+  const p = persons.find(x => x.id === pid);
+  if (!p) return;
+
+  const cov = await getCoverage(pid, currentYm);
+  const typeClass = p.type === 'oficina' ? 'p-type-oficina' : 'p-type-campo';
+  const typeLbl = p.type === 'oficina' ? '🏢 Oficina' : '📍 Campo';
+
+  const hdrEl = document.getElementById('nominaPersonHdr');
+  hdrEl.style.display = 'block';
+  hdrEl.innerHTML = `
+    <div class="person-hdr">
+      <div class="ph-avatar" style="background:var(--navy)">${initials(p.name)}</div>
+      <div>
+        <div class="ph-name">${formatName(p.name)}</div>
+        <div class="ph-role">${p.role} · CI ${p.ci||'—'}</div>
+        <div class="p-type-badge ${typeClass}" style="margin-top:.2rem">${typeLbl}</div>
+      </div>
+      <div class="ph-actions">
+        <select class="month-select" id="nominaMonth" onchange="currentYm=this.value;renderNominaForPerson('${pid}')"></select>
+        <button class="btn-action secondary" onclick="openEditPerson('${pid}')">✏️ Editar</button>
+        ${p.type !== 'oficina' ? `<button class="btn-action secondary" onclick="openRecibo('${pid}')">📎 Recibo</button>` : ''}
+        ${p.type !== 'oficina' ? `<button class="btn-action danger" onclick="generatePDF('${pid}')">⬇ PDF</button>` : ''}
+        <div class="ph-cov">
+          <div class="ph-cov-pct">${cov !== null ? cov+'%' : '—'}</div>
+          <div class="ph-cov-lbl">Cobertura</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Populate month selector
+  const sel = document.getElementById('nominaMonth');
+  const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Setiembre','Octubre','Noviembre','Diciembre'];
+  const now = new Date();
+  sel.innerHTML = '';
+  for (let m = 0; m < 12; m++) {
+    const ym = now.getFullYear() + '-' + String(m+1).padStart(2,'0');
+    const opt = document.createElement('option');
+    opt.value = ym; opt.textContent = MONTHS[m] + ' ' + now.getFullYear();
+    if (ym === currentYm) opt.selected = true;
+    sel.appendChild(opt);
+  }
+
+  await renderCalendar(pid, currentYm);
+}
+
+// ══════════════════════════════════════════════
+// CALENDAR
+// ══════════════════════════════════════════════
+async function renderCalendar(pid, ym) {
+  const days = getDaysInMonth(ym);
+  const weeks = getWeeks(days);
+  const [y,m] = ym.split('-');
+  const DOW = ['DOM','LUN','MAR','MIÉ','JUE','VIE','SÁB'];
+  const today = new Date().toISOString().slice(0,10);
+
+  let html = '';
+  for (const week of weeks) {
+    const validDays = week.days.filter(Boolean);
+    if (!validDays.length) continue;
+    const first = validDays[0].date.slice(8);
+    const last  = validDays[validDays.length-1].date.slice(8);
+    html += `<div class="week-block">
+      <div class="week-label"><span>SEMANA ${week.num}</span><span>${first}/${m}/${y} — ${last}/${m}/${y}</span></div>
+      <div class="days-grid">`;
+
+    for (let i = 0; i < 7; i++) {
+      const d = week.days[i];
+      if (!d) { html += `<div class="day-card" style="opacity:.2;cursor:default"></div>`; continue; }
+      const future = d.date > today;
+      const isToday = d.date === today;
+      const rec = await dbGet('days', pid+'_'+d.date);
+      const status = rec?.status || null;
+      const fotoE = rec?.fotoEntrada || rec?.photoData || null;
+      const fotoA = rec?.fotoAlmuerzo || null;
+      const fotoS = rec?.fotoSalida || null;
+
+      const p = persons.find(x => x.id === pid);
+      const isCampo = p?.type !== 'oficina';
+
+      html += `<div class="day-card${future?' future':''}${isToday?' today':''}" onclick="openDayModal('${pid}','${d.date}')">
+        <div class="day-hdr">
+          <div class="day-dow">${DOW[i]}</div>
+          <div class="day-num">${d.dayNum}</div>
+        </div>
+        <div class="day-body">`;
+
+      if (isCampo && (fotoE || fotoA || fotoS)) {
+        html += `<div class="day-photos">
+          ${fotoE?`<img class="day-photo-thumb" src="${fotoE}" title="Entrada ${rec.horaEntrada||''}">`:`<div class="day-photo-empty" title="Sin foto entrada">E</div>`}
+          ${fotoA?`<img class="day-photo-thumb" src="${fotoA}" title="Almuerzo ${rec.horaAlmuerzo||''}">`:`<div class="day-photo-empty" title="Sin foto almuerzo">A</div>`}
+          ${fotoS?`<img class="day-photo-thumb" src="${fotoS}" title="Salida ${rec.horaSalida||''}">`:`<div class="day-photo-empty" title="Sin foto salida">S</div>`}
+        </div>`;
+      } else if (!isCampo) {
+        html += `<div style="font-size:1rem;padding:.25rem 0">🏢</div>`;
+      } else {
+        html += `<div class="day-photo-empty" style="width:60px;height:36px;font-size:11px">📷</div>`;
+      }
+
+      if (status) {
+        html += `<div class="day-status s-${status}">${STATUS_LABELS[status]||status}</div>`;
+        if (rec?.horaEntrada) html += `<div class="day-hora">🟢${rec.horaEntrada}${rec.horaSalida?' 🔴'+rec.horaSalida:''}</div>`;
+        if (rec?.obs) html += `<div class="day-obs-text">${rec.obs.slice(0,20)}</div>`;
+      } else {
+        html += `<div class="day-empty">Sin registrar</div>`;
+      }
+
+      html += `</div></div>`;
+    }
+    html += `</div></div>`;
+  }
+
+  document.getElementById('nominaContent').innerHTML = html || '<div class="empty-state"><div class="ico">📅</div><div class="msg">Sin datos para este mes</div></div>';
+}
+
+// ══════════════════════════════════════════════
+// COVERAGE
+// ══════════════════════════════════════════════
+async function getCoverage(pid, ym) {
+  const days = getDaysInMonth(ym);
+  let present = 0, total = 0;
+  for (const d of days) {
+    if (isFuture(d.date)) continue;
+    const rec = await dbGet('days', pid+'_'+d.date);
+    if (rec) {
+      if (rec.status === 'LIBRE' || rec.status === 'FERIADO') continue;
+      total++;
+      if (rec.status === 'PRESENTE') present++;
+    } else { total++; }
+  }
+  if (total === 0) return null;
+  return Math.round((present/total)*100);
+}
+
+// ══════════════════════════════════════════════
+// DAY MODAL
+// ══════════════════════════════════════════════
+async function openDayModal(pid, date) {
+  const p = persons.find(x => x.id === pid);
+  const rec = await dbGet('days', pid+'_'+date) || {};
+  modalState = { personId:pid, date, status:rec.status||null, obs:rec.obs||'', photoData:rec.photoData||null };
+
+  document.getElementById('dayModalTitle').textContent = formatName(p.name);
+  const [y,m,d] = date.split('-');
+  const dow = new Date(date+'T12:00:00').toLocaleDateString('es-PY',{weekday:'long'});
+  document.getElementById('dayModalDate').textContent = dow.charAt(0).toUpperCase()+dow.slice(1)+' '+d+'/'+m+'/'+y;
+
+  // Pills
+  const pillsEl = document.getElementById('statusPills');
+  pillsEl.innerHTML = Object.entries(STATUS_LABELS).map(([k,v]) =>
+    `<div class="pill${modalState.status===k?' selected-'+k:''}" data-status="${k}" onclick="selectStatus('${k}')">${v}</div>`
+  ).join('');
+
+  document.getElementById('obsInput').value = modalState.obs;
+
+  // Promo photos
+  const fotoE = rec?.fotoEntrada||null, fotoA=rec?.fotoAlmuerzo||null, fotoS=rec?.fotoSalida||null;
+  const promoSec = document.getElementById('promoPhotosSection');
+  if (fotoE||fotoA||fotoS) {
+    promoSec.style.display = 'block';
+    const imgStyle = 'width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;border:2px solid';
+    const emptyStyle = 'width:100%;aspect-ratio:1;background:var(--gray-ll);border-radius:6px;border:2px dashed var(--gray-l);display:flex;align-items:center;justify-content:center;color:var(--gray)';
+    document.getElementById('photoEntradaWrap').innerHTML = fotoE?`<img src="${fotoE}" style="${imgStyle} var(--green)" onclick="window.open('${fotoE}','_blank')">`:`<div style="${emptyStyle}">📷</div>`;
+    document.getElementById('photoAlmuerzoWrap').innerHTML = fotoA?`<img src="${fotoA}" style="${imgStyle} var(--yellow)" onclick="window.open('${fotoA}','_blank')">`:`<div style="${emptyStyle}">📷</div>`;
+    document.getElementById('photoSalidaWrap').innerHTML   = fotoS?`<img src="${fotoS}" style="${imgStyle} var(--red)" onclick="window.open('${fotoS}','_blank')">`:`<div style="${emptyStyle}">📷</div>`;
+    document.getElementById('horaEntradaLbl').textContent  = rec?.horaEntrada||'';
+    document.getElementById('horaAlmuerzoLbl').textContent = rec?.horaAlmuerzo||'';
+    document.getElementById('horaSalidaLbl').textContent   = rec?.horaSalida||'';
+  } else { promoSec.style.display = 'none'; }
+
+  // Manual photo
+  const zone = document.getElementById('dayPhotoZone');
+  if (modalState.photoData) {
+    zone.innerHTML = `<img src="${modalState.photoData}" style="width:100%;max-height:180px;object-fit:cover"><button class="btn-remove-photo" onclick="clearDayPhoto()">✕</button>`;
+    zone.classList.add('has-photo');
+    document.getElementById('btnDelPhoto').style.display = 'inline';
+  } else {
+    zone.innerHTML = `<div class="photo-hint"><div class="ico">📷</div><div>Click para subir foto</div></div>`;
+    zone.classList.remove('has-photo');
+    document.getElementById('btnDelPhoto').style.display = 'none';
+  }
+
+  document.getElementById('dayOverlay').classList.add('open');
+}
+
+function closeDayModal() { document.getElementById('dayOverlay').classList.remove('open'); }
+
+function selectStatus(s) {
+  modalState.status = s;
+  document.querySelectorAll('.pill').forEach(el => {
+    el.className = 'pill' + (el.dataset.status===s?' selected-'+s:'');
+  });
+}
+
+function handleDayPhoto(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    modalState.photoData = ev.target.result;
+    const zone = document.getElementById('dayPhotoZone');
+    zone.innerHTML = `<img src="${ev.target.result}" style="width:100%;max-height:180px;object-fit:cover"><button class="btn-remove-photo" onclick="clearDayPhoto()">✕</button>`;
+    zone.classList.add('has-photo');
+    document.getElementById('btnDelPhoto').style.display = 'inline';
+  };
+  reader.readAsDataURL(file);
+  e.target.value = '';
+}
+
+function clearDayPhoto() {
+  modalState.photoData = null;
+  const zone = document.getElementById('dayPhotoZone');
+  zone.innerHTML = `<div class="photo-hint"><div class="ico">📷</div><div>Click para subir foto</div></div>`;
+  zone.classList.remove('has-photo');
+  document.getElementById('btnDelPhoto').style.display = 'none';
+}
+
+async function saveDay() {
+  modalState.obs = document.getElementById('obsInput').value;
+  if (!modalState.status) { showToast('Seleccioná un estado','error'); return; }
+  const key = modalState.personId+'_'+modalState.date;
+  const existing = await dbGet('days', key) || {};
+  await dbPut('days', { ...existing, key, personId:modalState.personId, date:modalState.date,
+    status:modalState.status, obs:modalState.obs, photoData:modalState.photoData, fuente:'MANUAL_OVERRIDE' });
+  closeDayModal();
+  showToast('Guardado','success');
+  renderNominaForPerson(modalState.personId);
+  renderSidebar();
+}
+
+async function clearDay() {
+  const key = modalState.personId+'_'+modalState.date;
+  await dbDelete('days', key);
+  closeDayModal();
+  showToast('Registro eliminado','success');
+  renderNominaForPerson(modalState.personId);
+  renderSidebar();
+}
+
+// ══════════════════════════════════════════════
+// PERSONS CRUD
+// ══════════════════════════════════════════════
+function openAddPerson() {
+  document.getElementById('personModalTitle').textContent = 'Agregar persona';
+  document.getElementById('editPersonId').value = '';
+  document.getElementById('pName').value = '';
+  document.getElementById('pRole').value = '';
+  document.getElementById('pCI').value = '';
+  document.getElementById('pType').value = 'campo';
+  document.getElementById('personOverlay').classList.add('open');
+}
+
+function openEditPerson(id) {
+  const p = persons.find(x => x.id === id);
+  document.getElementById('personModalTitle').textContent = 'Editar persona';
+  document.getElementById('editPersonId').value = id;
+  document.getElementById('pName').value = p.name;
+  document.getElementById('pRole').value = p.role;
+  document.getElementById('pCI').value = p.ci||'';
+  document.getElementById('pType').value = p.type||'campo';
+  document.getElementById('personOverlay').classList.add('open');
+}
+
+function closePersonModal() { document.getElementById('personOverlay').classList.remove('open'); }
+
+async function savePerson() {
+  const id = document.getElementById('editPersonId').value;
+  const name = document.getElementById('pName').value.trim().toUpperCase();
+  const role = document.getElementById('pRole').value.trim().toUpperCase();
+  const ci   = document.getElementById('pCI').value.trim();
+  const type = document.getElementById('pType').value;
+  if (!name) { showToast('El nombre es requerido','error'); return; }
+
+  if (id) {
+    const idx = persons.findIndex(x => x.id === id);
+    persons[idx] = { ...persons[idx], name, role, ci, type };
+    await dbPut('persons', persons[idx]);
+  } else {
+    const newId = 'P' + String(Date.now()).slice(-6);
+    const newP = { id:newId, name, role, ci, type, inactive:false };
+    persons.push(newP);
+    await dbPut('persons', newP);
+  }
+
+  closePersonModal();
+  renderSidebar();
+  populateHheePersons();
+  showToast('Persona guardada','success');
+}
+
+// ══════════════════════════════════════════════
+// IMPULSOS
+// ══════════════════════════════════════════════
+function openAddCampania() { document.getElementById('campaniaOverlay').classList.add('open'); }
+function closeCampaniaModal() { document.getElementById('campaniaOverlay').classList.remove('open'); }
+
+async function saveCampania() {
+  const name    = document.getElementById('campaniaName').value.trim();
+  const cliente = document.getElementById('campaniaCliente').value.trim();
+  const inicio  = document.getElementById('campaniaInicio').value;
+  const fin     = document.getElementById('campaniaFin').value;
+  if (!name) { showToast('El nombre es requerido','error'); return; }
+  const camp = { id:'camp_'+Date.now(), name, cliente, inicio, fin, active:true, promotores:[] };
+  campanias.push(camp);
+  await dbPut('campanias', camp);
+  closeCampaniaModal();
+  renderImpulsos();
+  showToast('Campaña creada','success');
+}
+
+async function renderImpulsos() {
+  const el = document.getElementById('impulsosContent');
+  campanias = await dbGetAll('campanias');
+  if (!campanias.length) {
+    el.innerHTML = `<div class="empty-state"><div class="ico">⚡</div><div class="msg">No hay campañas de impulso. Creá la primera.</div></div>`;
+    return;
+  }
+  el.innerHTML = campanias.map(c => `
+    <div class="cierre-section" style="margin-bottom:.75rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
+        <div>
+          <div style="font-size:.9rem;font-weight:700">${c.name}</div>
+          <div style="font-size:.72rem;color:var(--gray)">${c.cliente||''} · ${c.inicio||'—'} al ${c.fin||'—'}</div>
+        </div>
+        <div style="display:flex;gap:.5rem">
+          <button class="btn-action secondary" onclick="addImpulsoPromotor('${c.id}')">+ Promotor</button>
+          <button class="btn-action danger" onclick="deleteCampania('${c.id}')">Eliminar</button>
+        </div>
+      </div>
+      <div id="camp-${c.id}-list">
+        ${(c.promotores||[]).map(p => `
+          <div style="display:flex;align-items:center;gap:.5rem;padding:.35rem .5rem;background:var(--gray-ll);border-radius:6px;margin-bottom:.3rem;font-size:.78rem">
+            <span style="font-weight:600">${p.name}</span>
+            <span style="color:var(--gray)">${p.ci||''}</span>
+            <button onclick="removeImpulsoPromotor('${c.id}','${p.id}')" style="margin-left:auto;background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem">✕</button>
+          </div>
+        `).join('')}
+        ${!(c.promotores||[]).length ? '<div style="font-size:.72rem;color:var(--gray);padding:.25rem">Sin promotores cargados</div>' : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+async function addImpulsoPromotor(campId) {
+  const name = prompt('Nombre completo del promotor (APELLIDO, NOMBRE):');
+  if (!name) return;
+  const ci = prompt('CI:') || '';
+  const camp = campanias.find(c => c.id === campId);
+  if (!camp) return;
+  camp.promotores = camp.promotores || [];
+  camp.promotores.push({ id:'pi_'+Date.now(), name:name.toUpperCase(), ci });
+  await dbPut('campanias', camp);
+  renderImpulsos();
+  showToast('Promotor agregado','success');
+}
+
+async function removeImpulsoPromotor(campId, promId) {
+  const camp = campanias.find(c => c.id === campId);
+  if (!camp) return;
+  camp.promotores = (camp.promotores||[]).filter(p => p.id !== promId);
+  await dbPut('campanias', camp);
+  renderImpulsos();
+}
+
+async function deleteCampania(id) {
+  if (!confirm('¿Eliminar esta campaña?')) return;
+  campanias = campanias.filter(c => c.id !== id);
+  await dbDelete('campanias', id);
+  renderImpulsos();
+  showToast('Campaña eliminada','success');
+}
+
+// ══════════════════════════════════════════════
+// HHEE
+// ══════════════════════════════════════════════
+function openHheeModal(id) {
+  hheeState = { photoEntrada:null, photoSalida:null };
+  document.getElementById('hheeEditId').value = id||'';
+  document.getElementById('hheeModalTitle').textContent = id ? 'Editar HHEE' : 'Nueva HHEE';
+  document.getElementById('hheeFecha').value = new Date().toISOString().slice(0,10);
+  ['hheeSucursal','hheeDia','hheeEntrada','hheeSalida','hheeDiurno','hheeNocturno','hheeTotal'].forEach(id => document.getElementById(id).value='');
+  document.getElementById('hheePhotoEntZone').innerHTML = `<div class="photo-hint"><div class="ico">📷</div></div>`;
+  document.getElementById('hheePhotoSalZone').innerHTML = `<div class="photo-hint"><div class="ico">📷</div></div>`;
+  document.getElementById('hheeOverlay').classList.add('open');
+}
+function closeHheeModal() { document.getElementById('hheeOverlay').classList.remove('open'); }
+
+function handleHheePhoto(e, tipo) {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    if (tipo === 'entrada') {
+      hheeState.photoEntrada = ev.target.result;
+      document.getElementById('hheePhotoEntZone').innerHTML = `<img src="${ev.target.result}" style="width:100%;max-height:80px;object-fit:cover">`;
+    } else {
+      hheeState.photoSalida = ev.target.result;
+      document.getElementById('hheePhotoSalZone').innerHTML = `<img src="${ev.target.result}" style="width:100%;max-height:80px;object-fit:cover">`;
+    }
+  };
+  reader.readAsDataURL(file);
+  e.target.value = '';
+}
+
+async function saveHhee() {
+  const pid = document.getElementById('hheePerson').value;
+  const p   = persons.find(x => x.id === pid);
+  const fecha = document.getElementById('hheeFecha').value;
+  const ym = fecha.slice(0,7);
+  const rec = {
+    id: document.getElementById('hheeEditId').value || 'hhee_'+Date.now(),
+    personId: pid, nombre: p?.name||'', cargo: p?.role||'',
+    ym, fecha,
+    sucursal:  document.getElementById('hheeSucursal').value,
+    dia:       document.getElementById('hheeDia').value,
+    entrada:   document.getElementById('hheeEntrada').value,
+    salida:    document.getElementById('hheeSalida').value,
+    diurno:    document.getElementById('hheeDiurno').value,
+    nocturno:  document.getElementById('hheeNocturno').value,
+    total:     document.getElementById('hheeTotal').value,
+    photoEntrada: hheeState.photoEntrada,
+    photoSalida:  hheeState.photoSalida,
+  };
+  await dbPut('hhee', rec);
+  closeHheeModal();
+  renderHheeView();
+  showToast('HHEE guardada','success');
+}
+
+async function renderHheeView() {
+  const ym = document.getElementById('monthSelectHhee').value;
+  const pf = document.getElementById('personFilterHhee').value;
+  let rows = await dbGetAll('hhee');
+  rows = rows.filter(r => r.ym === ym);
+  if (pf !== 'all') rows = rows.filter(r => r.personId === pf);
+  rows.sort((a,b) => a.fecha.localeCompare(b.fecha));
+
+  const el = document.getElementById('hheeContent');
+  if (!rows.length) {
+    el.innerHTML = `<div class="empty-state"><div class="ico">⏱</div><div class="msg">Sin registros de HHEE para este período</div></div>`;
+    return;
+  }
+  el.innerHTML = `<table class="hhee-table">
+    <thead><tr>
+      <th>Persona</th><th>Fecha</th><th>Sucursal</th><th>Entrada</th><th>Salida</th>
+      <th>Diurno</th><th>Nocturno</th><th>Total</th><th>Foto E</th><th>Foto S</th><th></th>
+    </tr></thead>
+    <tbody>${rows.map(r => `<tr>
+      <td>${r.nombre?r.nombre.split(',')[0].trim():r.personId}</td>
+      <td>${r.fecha||''}</td><td>${r.sucursal||''}</td>
+      <td>${r.entrada||''}</td><td>${r.salida||''}</td>
+      <td>${r.diurno||''}</td><td>${r.nocturno||''}</td>
+      <td style="font-weight:700">${r.total||''}</td>
+      <td>${r.photoEntrada?`<img class="hhee-photo-thumb" src="${r.photoEntrada}">`:'—'}</td>
+      <td>${r.photoSalida?`<img class="hhee-photo-thumb" src="${r.photoSalida}">`:'—'}</td>
+      <td><button onclick="deleteHhee('${r.id}')" style="background:none;border:none;color:var(--red);cursor:pointer">✕</button></td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+async function deleteHhee(id) {
+  if (!confirm('¿Eliminar este registro?')) return;
+  await dbDelete('hhee', id);
+  renderHheeView();
+}
+
+async function exportHheeExcel() {
+  const ym = document.getElementById('monthSelectHhee').value;
+  const rows = (await dbGetAll('hhee')).filter(r => r.ym === ym);
+  const data = rows.map(r => ({
+    Persona:r.nombre||r.personId, Fecha:r.fecha, Sucursal:r.sucursal, Dia:r.dia,
+    Entrada:r.entrada, Salida:r.salida, Diurno:r.diurno, Nocturno:r.nocturno, Total:r.total
+  }));
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'HHEE');
+  XLSX.writeFile(wb, 'HHEE_HONOR_'+ym+'.xlsx');
+}
+
+async function generateHheePDF() {
+  const ym = document.getElementById('monthSelectHhee').value;
+  const pf = document.getElementById('personFilterHhee').value;
+  let rows = (await dbGetAll('hhee')).filter(r => r.ym === ym);
+  if (pf !== 'all') rows = rows.filter(r => r.personId === pf);
+  if (!rows.length) { showToast('Sin registros','error'); return; }
+
+  const byPerson = {};
+  for (const r of rows) {
+    if (!byPerson[r.personId]) byPerson[r.personId] = [];
+    byPerson[r.personId].push(r);
+  }
+
+  const [y,m] = ym.split('-');
+  const MESES = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Setiembre','Octubre','Noviembre','Diciembre'];
+  const mesLbl = MESES[parseInt(m)] + ' ' + y;
+
+  let html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif}
+  .page{width:210mm;padding:10mm;page-break-after:always}
+  .hdr{background:#1a1f3a;color:#fff;padding:8px 12px;border-radius:6px;margin-bottom:10px;display:flex;justify-content:space-between}
+  .hdr-title{font-size:14px;font-weight:700;color:#c9a84c}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .card{border:1px solid #e0e3f0;border-radius:6px;overflow:hidden}
+  .card-photos{display:grid;grid-template-columns:1fr 1fr}
+  .card-photo{width:100%;height:70px;object-fit:cover}
+  .card-photo-empty{width:100%;height:70px;background:#f0f1f8;display:flex;align-items:center;justify-content:center;color:#ccc}
+  .card-info{padding:5px 7px;font-size:8px}
+  .card-total{background:#1a1f3a;color:#c9a84c;font-weight:700;padding:1px 5px;border-radius:3px;font-size:8px;display:inline-block}
+  @media print{@page{size:A4;margin:0}.page{page-break-after:always}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  </style></head><body>`;
+
+  for (const [pid, pRows] of Object.entries(byPerson)) {
+    const nombre = pRows[0].nombre || pid;
+    const totalMins = pRows.reduce((acc,r) => {
+      if (!r.total) return acc;
+      const [hh,mm] = r.total.split(':').map(Number);
+      return acc + hh*60 + (mm||0);
+    },0);
+    const th = Math.floor(totalMins/60), tm = totalMins%60;
+
+    html += `<div class="page">
+      <div class="hdr">
+        <div><div class="hdr-title">HONOR · HORAS EXTRA</div><div style="font-size:10px">${mesLbl}</div></div>
+        <div style="text-align:right"><div style="font-size:12px;font-weight:700">${nombre}</div>
+          <div style="font-size:9px;color:#8a8ea8">Total: ${th}h${tm>0?' '+tm+'min':''}</div></div>
+      </div>
+      <div class="grid">`;
+
+    for (const r of pRows) {
+      const [,fm,fd] = r.fecha.split('-');
+      html += `<div class="card">
+        <div class="card-photos">
+          ${r.photoEntrada?`<img class="card-photo" src="${r.photoEntrada}">`:`<div class="card-photo-empty">📷</div>`}
+          ${r.photoSalida?`<img class="card-photo" src="${r.photoSalida}">`:`<div class="card-photo-empty">📷</div>`}
+        </div>
+        <div class="card-info">
+          <div style="font-weight:700">${fd}/${fm} · ${r.dia||''}</div>
+          <div>${r.sucursal||'—'}</div>
+          <div>${r.entrada||'—'} → ${r.salida||'—'}</div>
+          <span class="card-total">${r.total||'—'}</span>
+        </div>
+      </div>`;
+    }
+    html += `</div></div>`;
+  }
+  html += `</body></html>`;
+  const win = window.open('','_blank');
+  win.document.write(html);
+  win.document.close();
+  setTimeout(()=>win.print(),600);
+}
+
+// ══════════════════════════════════════════════
+// RECIBO
+// ══════════════════════════════════════════════
+function openRecibo(pid) {
+  reciboState = { personId:pid, photoData:null };
+  const p = persons.find(x=>x.id===pid);
+  document.getElementById('reciboTitle').textContent = 'Recibo · '+p.name.split(',')[0].trim()+' · '+getMonthLabel(currentYm);
+  document.getElementById('reciboPhotoZone').innerHTML = `<div class="photo-hint"><div class="ico">📷</div><div>Click para subir foto del recibo</div></div>`;
+  document.getElementById('reciboOverlay').classList.add('open');
+}
+function closeRecibo() { document.getElementById('reciboOverlay').classList.remove('open'); }
+function handleReciboPhoto(e) {
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    reciboState.photoData = ev.target.result;
+    document.getElementById('reciboPhotoZone').innerHTML = `<img src="${ev.target.result}" style="width:100%;max-height:300px;object-fit:contain">`;
+  };
+  reader.readAsDataURL(file);
+  e.target.value = '';
+}
+async function saveRecibo() {
+  if (!reciboState.photoData) { showToast('Subí la foto primero','error'); return; }
+  await dbPut('receipts', { key:reciboState.personId+'_'+currentYm, personId:reciboState.personId, ym:currentYm, photoData:reciboState.photoData });
+  closeRecibo();
+  showToast('Recibo guardado','success');
+}
+
+// ══════════════════════════════════════════════
+// EXCEL CIERRE
+// ══════════════════════════════════════════════
+async function exportExcelCierre(tipo) {
+  const ym = document.getElementById('cierreMonth').value;
+  const days = getDaysInMonth(ym);
+  const [y,m] = ym.split('-');
+  const MESES = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Setiembre','Octubre','Noviembre','Diciembre'];
+
+  let filteredPersons = persons.filter(p => !p.inactive);
+  if (tipo === 'campo') filteredPersons = filteredPersons.filter(p => p.type !== 'oficina');
+  if (tipo === 'oficina') filteredPersons = filteredPersons.filter(p => p.type === 'oficina');
+
+  const wb = XLSX.utils.book_new();
+  const header = ['NOMBRE','CARGO','CI',...days.map(d=>d.dayNum+'/'+m),'PRESENTES','AUSENTES','COB%'];
+  const data = [header];
+
+  for (const p of filteredPersons) {
+    const row = [p.name, p.role, p.ci||''];
+    let pres=0, aus=0, total=0;
+    for (const d of days) {
+      const rec = await dbGet('days', p.id+'_'+d.date);
+      const st = rec?.status||'';
+      const lbl = STATUS_LABELS[st]||'—';
+      row.push(lbl);
+      if (st && st!=='LIBRE' && st!=='FERIADO') {
+        total++;
+        if (st==='PRESENTE') pres++;
+        else aus++;
+      }
+    }
+    row.push(pres, aus, total>0?Math.round(pres/total*100)+'%':'—');
+    data.push(row);
+  }
+
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  XLSX.utils.book_append_sheet(wb, ws, 'Asistencia');
+  XLSX.writeFile(wb, 'HONOR_Asistencia_'+MESES[parseInt(m)]+'_'+y+'.xlsx');
+  showToast('Excel descargado','success');
+}
+
+// ══════════════════════════════════════════════
+// DRIVE — CREAR CARPETAS
+// ══════════════════════════════════════════════
+async function crearCarpetasDrive() {
+  const ym = document.getElementById('cierreMonthDrive').value;
+  const persona = document.getElementById('cierrePersonaDrive').value;
+  const url = localStorage.getItem('workerUrl') || WORKER_URL;
+  const btn = document.getElementById('btnCrearCarpetas');
+  const log = document.getElementById('driveLog');
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Creando...';
+  log.style.display = 'block';
+  log.textContent = 'Conectando con Drive...\n';
+
+  try {
+    let endpoint = url+'/generar-reportes?key='+GAS_SECRET+'&ym='+ym;
+    if (persona !== 'todos') endpoint += '&persona='+persona;
+
+    const res = await fetch(endpoint);
+    const data = await res.json();
+
+    if (!data.ok) throw new Error(data.error);
+    log.textContent += 'Mes: '+data.mes+'\n\n';
+
+    for (const r of (data.resultados||[])) {
+      const nombre = r.nombre?r.nombre.split(',')[0].trim():r.pid;
+      if (r.ok) {
+        log.textContent += 'OK: '+nombre+'\n';
+        if (r.link) {
+          const a = document.createElement('a');
+          a.href = r.link; a.target = '_blank';
+          a.textContent = '   → Abrir carpeta de '+nombre;
+          a.style.cssText = 'display:block;font-size:.75rem;color:var(--blue);margin:2px 0 6px 8px';
+          log.appendChild(a);
+        }
+      } else {
+        log.textContent += 'ERROR: '+nombre+' — '+r.error+'\n';
+      }
+    }
+    log.textContent += '\nCarpetas listas. Subí los PDFs manualmente.';
+    showToast('Carpetas creadas en Drive','success');
+  } catch(e) {
+    log.textContent += 'Error: '+e.message;
+    showToast('Error al crear carpetas','error');
+  }
+  btn.disabled = false;
+  btn.textContent = '📁 Crear carpetas en Drive';
+}
+
+// ══════════════════════════════════════════════
+// PDF NOMINA
+// ══════════════════════════════════════════════
+async function generatePDF(pid) {
+  const p = persons.find(x=>x.id===pid);
+  if (!p) return;
+  const ym = currentYm;
+  const days = getDaysInMonth(ym);
+  const weeks = getWeeks(days);
+  const [y,m] = ym.split('-');
+  const MESES=['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Setiembre','Octubre','Noviembre','Diciembre'];
+  const mesLbl = MESES[parseInt(m)].toUpperCase()+' '+y;
+  const DOW_SHORT = ['DO','LU','MA','MI','JU','VI','SÁ'];
+  const STATUS_BG = {PRESENTE:'#d4f5e2',AUSENTE:'#fde8e8',LIBRE:'#dbeafe',REPOSO:'#fef3c7',JUSTIFICADO:'#ede9fe',FERIADO:'#ede9fe',VACACIONES:'#cffafe',MATERNIDAD:'#fce7f3',PERMISO:'#fef3c7',CAP:'#dbeafe',RENUNCIA:'#f3f4f6'};
+  const STATUS_TC = {PRESENTE:'#1a7a42',AUSENTE:'#b71c1c',LIBRE:'#1e40af',REPOSO:'#92400e',JUSTIFICADO:'#5b21b6',FERIADO:'#4a1d96',VACACIONES:'#0e7490',MATERNIDAD:'#be185d',PERMISO:'#92400e',CAP:'#1e3a8a',RENUNCIA:'#6b7280'};
+  const now = new Date().toLocaleDateString('es-PY',{day:'2-digit',month:'2-digit',year:'numeric'});
+  const primerNombre = p.name.split(',')[0].trim();
+
+  // Page 1: summary grid
+  let presCount=0, ausCount=0;
+  let summHtml = '';
+  for (const d of days) {
+    const dow = new Date(d.date+'T12:00:00').getDay();
+    const rec = await dbGet('days', p.id+'_'+d.date);
+    const st = rec?.status||'';
+    const lbl = STATUS_LABELS[st]||'—';
+    const bg = STATUS_BG[st]||'#f5f5f5';
+    const tc = STATUS_TC[st]||'#bbb';
+    if (st==='PRESENTE') presCount++;
+    if (st==='AUSENTE') ausCount++;
+    summHtml += `<div style="border:1px solid #e0e3f0;border-radius:4px;overflow:hidden;min-width:0">
+      <div style="background:#1a1f3a;color:#c9a84c;font-size:7px;font-weight:700;text-align:center;padding:2px">${DOW_SHORT[dow]}</div>
+      <div style="font-size:10px;font-weight:700;color:#1a1f3a;text-align:center;padding:2px">${d.dayNum}</div>
+      <div style="background:${bg};color:${tc};font-size:6px;font-weight:700;text-align:center;padding:2px;min-height:16px">${lbl}</div>
+    </div>`;
+  }
+
+  // Week pages
+  let weekPages = '';
+  for (let si=0; si<weeks.length; si++) {
+    const wk = weeks[si];
+    const vd = wk.days.filter(Boolean);
+    if (!vd.length) continue;
+    const fd = vd[0].date.slice(8), ld = vd[vd.length-1].date.slice(8);
+    let dayCells = '';
+    for (let di=0; di<7; di++) {
+      const d = wk.days[di];
+      if (!d) { dayCells += '<td style="border:1px solid #e0e3f0;padding:3px;width:14%;vertical-align:top"></td>'; continue; }
+      const dow = new Date(d.date+'T12:00:00').getDay();
+      const rec = await dbGet('days', p.id+'_'+d.date);
+      const st = rec?.status||'';
+      const lbl = STATUS_LABELS[st]||'Sin registrar';
+      const bg = STATUS_BG[st]||'#fafafa';
+      const tc = STATUS_TC[st]||'#bbb';
+      const fotoE = rec?.fotoEntrada||rec?.photoData||null;
+      dayCells += `<td style="border:1px solid #e0e3f0;padding:3px;width:14%;vertical-align:top">
+        <div style="background:#1a1f3a;color:#c9a84c;text-align:center;padding:2px;font-size:8px;font-weight:700">${DOW_SHORT[dow]} ${d.dayNum}</div>
+        ${fotoE?`<img src="${fotoE}" style="width:100%;height:120px;object-fit:cover;object-position:center top;display:block">`:`<div style="width:100%;height:120px;background:#f0f1f8;display:flex;align-items:center;justify-content:center;font-size:18px">📷</div>`}
+        <div style="background:${bg};color:${tc};text-align:center;padding:2px;font-size:7.5px;font-weight:700">${lbl}</div>
+        ${rec?.horaEntrada?`<div style="font-size:6.5px;color:#555;text-align:center">🟢${rec.horaEntrada}${rec.horaSalida?' 🔴'+rec.horaSalida:''}</div>`:''}
+        ${rec?.obs?`<div style="font-size:6px;color:#888;text-align:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${rec.obs.slice(0,30)}</div>`:''}
+        ${fotoE?`<div style="background:rgba(26,31,58,.7);color:#c9a84c;font-size:5.5px;padding:1px 3px;font-weight:700">HONOR · ${primerNombre} · ${rec?.horaEntrada||''} · ${d.date.slice(8)}/${m}/${y}</div>`:''}
+      </td>`;
+    }
+    weekPages += `<div style="width:297mm;padding:7mm 8mm 5mm;page-break-after:always">
+      <div style="background:#1a1f3a;color:#fff;border-radius:6px;padding:8px 14px;display:grid;grid-template-columns:1fr 1fr 1fr;align-items:center;margin-bottom:6px">
+        <div><div style="font-size:20px;font-weight:700;letter-spacing:3px;color:#c9a84c">HONOR</div><div style="font-size:11px;font-weight:600">${p.name}</div><div style="font-size:9px;color:#8a8ea8">${p.role}</div></div>
+        <div style="text-align:center"><div style="font-size:14px;font-weight:700;color:#c9a84c">SEMANA ${si+1}</div><div style="font-size:9px">${fd}/${m}/${y} — ${ld}/${m}/${y}</div><div style="font-size:8px;color:#8a8ea8">${mesLbl}</div></div>
+        <div style="text-align:right"><div style="font-size:9px;font-weight:700;color:#c9a84c">REPORTE FOTOGRÁFICO</div><div style="font-size:8px;color:#8a8ea8">Generado: ${now}</div></div>
+      </div>
+      <table style="width:100%;border-collapse:collapse"><tr>${dayCells}</tr></table>
+      <div style="text-align:center;font-size:7px;color:#8a8ea8;border-top:1px solid #e8e9f0;padding-top:4px;margin-top:4px">+Marka Trade Marketing · HONOR Paraguay · ${mesLbl}</div>
+    </div>`;
+  }
+
+  // Recibo
+  const reciboRec = await dbGet('receipts', p.id+'_'+ym);
+  const reciboPage = reciboRec?.photoData ? `<div style="page-break-before:always;padding:10mm;text-align:center">
+    <div style="background:#1a1f3a;color:#fff;padding:10px 16px;border-radius:8px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:18px;font-weight:700;letter-spacing:3px;color:#c9a84c">HONOR</div>
+      <div style="font-size:12px;font-weight:600">RECIBO DE REMUNERACIONES · ${p.name} · ${mesLbl}</div>
+    </div>
+    <img src="${reciboRec.photoData}" style="max-width:100%;max-height:600px;object-fit:contain;border:1px solid #e0e3f0;border-radius:8px">
+  </div>` : '';
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif}@page{size:A4 landscape;margin:0}@media print{*{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style>
+  </head><body>
+  <!-- PAGE 1: SUMMARY -->
+  <div style="width:297mm;padding:8mm 10mm 6mm;page-break-after:always">
+    <div style="background:#1a1f3a;color:#fff;border-radius:8px;padding:10px 16px;display:grid;grid-template-columns:1fr 1fr 1fr;align-items:center;gap:10px;margin-bottom:8px">
+      <div><div style="font-size:22px;font-weight:700;letter-spacing:4px;color:#c9a84c">HONOR</div><div style="font-size:12px;font-weight:600">${p.name}</div><div style="font-size:9px;color:#8a8ea8">${p.role}</div></div>
+      <div style="text-align:center"><div style="font-size:14px;font-weight:700;color:#c9a84c">PLANILLA DE ASISTENCIA</div><div style="font-size:10px">${mesLbl}</div></div>
+      <div style="text-align:right"><div style="font-size:9px;font-weight:700;color:#c9a84c">RESUMEN DEL MES</div><div style="font-size:9px;color:#fff;margin-top:4px">✅ Presentes: ${presCount} · ❌ Ausentes: ${ausCount}</div><div style="font-size:8px;color:#8a8ea8">Total: ${days.length} días</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(${Math.min(days.length,16)},1fr);gap:3px">${summHtml}</div>
+    <div style="text-align:center;font-size:7px;color:#8a8ea8;border-top:1px solid #e8e9f0;padding-top:4px;margin-top:6px">+Marka Trade Marketing · HONOR Paraguay · ${mesLbl}</div>
+  </div>
+  ${weekPages}
+  ${reciboPage}
+  </body></html>`;
+
+  const win = window.open('','_blank');
+  win.document.write(html);
+  win.document.close();
+  win.onload = () => { win.focus(); win.print(); };
+
+  // Auto-subir PDF a Drive si hay carpeta configurada
+  await subirPDFaDrive(html, primerNombre, mesLbl, pid);
+}
+
+async function subirPDFaDrive(htmlContent, nombre, mes, pid) {
+  try {
+    // Convertir HTML a blob para obtener base64
+    // Usamos html2canvas approach via iframe
+    showToast('Subiendo PDF a Drive...', '');
+
+    // Crear iframe oculto para capturar el PDF
+    const workerUrl = localStorage.getItem('workerUrl') || WORKER_URL;
+
+    // Primero obtener/crear la carpeta del promotor en Drive
+    const MESES = {'Enero':'2026-01','Febrero':'2026-02','Marzo':'2026-03','Abril':'2026-04','Mayo':'2026-05','Junio':'2026-06','Julio':'2026-07','Agosto':'2026-08','Setiembre':'2026-09','Octubre':'2026-10','Noviembre':'2026-11','Diciembre':'2026-12'};
+    const ymPart = Object.entries(MESES).find(([k]) => mes.includes(k));
+    const ym = ymPart ? ymPart[1].slice(0,7) : currentYm;
+
+    // Crear carpetas y obtener carpetaId
+    const carpRes = await fetch(workerUrl + '/generar-reportes?key=' + GAS_SECRET + '&ym=' + ym + '&persona=' + pid);
+    const carpData = await carpRes.json();
+
+    if (!carpData.ok) {
+      console.log('No se pudo obtener carpeta:', carpData.error);
+      return;
+    }
+
+    const carpetaId = carpData.resultados?.[0]?.carpetaId;
+    if (!carpetaId) { console.log('Sin carpetaId'); return; }
+
+    // Convertir HTML a PDF base64 usando print API del navegador no es directo
+    // Alternativa: subir el HTML como archivo y Drive lo convierte
+    const htmlBlob = new Blob([htmlContent], { type: 'text/html' });
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const base64 = ev.target.result;
+      const res = await fetch(workerUrl + '/subir-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          key: GAS_SECRET,
+          nombre: nombre,
+          mes: mes,
+          carpetaId: carpetaId,
+          pdfBase64: base64,
+          mimeType: 'text/html'
+        })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        showToast('Archivo subido a Drive ✓', 'success');
+      } else {
+        console.log('Error subiendo a Drive:', data.error);
+      }
+    };
+    reader.readAsDataURL(htmlBlob);
+
+  } catch(e) {
+    console.log('Error en subirPDFaDrive:', e.message);
+  }
+}
+
+// ══════════════════════════════════════════════
+// AUTO-SYNC
+// ══════════════════════════════════════════════
+async function startAutoSync() {
+  const url = localStorage.getItem('workerUrl') || WORKER_URL;
+  document.getElementById('syncDot').style.background = '#f39c12';
+  document.getElementById('syncLabel').textContent = 'Sincronizando...';
+  await doSync(url);
+  if (autoSyncTimer) clearInterval(autoSyncTimer);
+  autoSyncTimer = setInterval(() => doSync(url), 5*60*1000);
+}
+
+async function doSync(url) {
+  try {
+    const now = new Date();
+    const desde = new Date(now.getFullYear(), now.getMonth()-1, 1).toISOString().slice(0,10);
+    const hasta = now.toISOString().slice(0,10);
+    const res = await fetch(url+'?key='+GAS_SECRET+'&desde='+desde+'&hasta='+hasta);
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error);
+
+    let changed = 0;
+    for (const rec of data.data) {
+      const status = {PRESENTE:'PRESENTE',OK:'PRESENTE','DIA LIBRE':'LIBRE',AUSENTE:'AUSENTE',REPOSO:'REPOSO',FERIADO:'FERIADO',VACACIONES:'VACACIONES',MATERNIDAD:'MATERNIDAD',PERMISO:'PERMISO',CAP:'CAP',RENUNCIA:'RENUNCIA',JUSTIFICADO:'JUSTIFICADO'}[rec.estado] || rec.estado || 'PRESENTE';
+      const key = rec.personId+'_'+rec.fecha;
+      const existing = await dbGet('days', key);
+      if (!existing) {
+        await dbPut('days', { key, personId:rec.personId, date:rec.fecha, status,
+          obs:rec.observacion||'', fotoEntrada:rec.fotoEntrada||null, fotoAlmuerzo:rec.fotoAlmuerzo||null,
+          fotoSalida:rec.fotoSalida||null, horaEntrada:rec.horaEntrada||'',
+          horaAlmuerzo:rec.horaAlmuerzo||'', horaSalida:rec.horaSalida||'', fuente:'PROMOTOR' });
+        changed++;
+      } else if (existing.fuente !== 'MANUAL_OVERRIDE') {
+        await dbPut('days', { ...existing, status, obs:rec.observacion||existing.obs,
+          fotoEntrada:rec.fotoEntrada||existing.fotoEntrada||null, fotoAlmuerzo:rec.fotoAlmuerzo||existing.fotoAlmuerzo||null,
+          fotoSalida:rec.fotoSalida||existing.fotoSalida||null, horaEntrada:rec.horaEntrada||existing.horaEntrada||'',
+          horaAlmuerzo:rec.horaAlmuerzo||existing.horaAlmuerzo||'', horaSalida:rec.horaSalida||existing.horaSalida||'', fuente:'PROMOTOR' });
+        changed++;
+      }
+    }
+
+    if (changed > 0 && currentTab === 'hoy') renderHoy();
+    if (changed > 0 && currentTab === 'nomina' && selectedPersonId) renderNominaForPerson(selectedPersonId);
+    if (changed > 0) renderSidebar();
+
+    const h = String(now.getHours()).padStart(2,'0');
+    const mi = String(now.getMinutes()).padStart(2,'0');
+    document.getElementById('syncDot').style.background = '#219653';
+    document.getElementById('syncLabel').textContent = 'Sync '+h+':'+mi;
+  } catch(e) {
+    document.getElementById('syncDot').style.background = '#c0392b';
+    document.getElementById('syncLabel').textContent = 'Sin conexión';
+  }
+}
+
+// ══════════════════════════════════════════════
+// CONFIG MODAL
+// ══════════════════════════════════════════════
+function openConfig() { document.getElementById('configOverlay').classList.add('open'); }
+function closeConfig() { document.getElementById('configOverlay').classList.remove('open'); }
+function saveConfig() {
+  const url = document.getElementById('workerUrlInput').value.trim();
+  localStorage.setItem('workerUrl', url);
+  closeConfig();
+  showToast('Configuración guardada','success');
+  startAutoSync();
+}
+
+async function runImport() {
+  const url = document.getElementById('workerUrlInput').value.trim() || WORKER_URL;
+  const desde = document.getElementById('syncDesde').value;
+  const hasta = document.getElementById('syncHasta').value;
+  const btn = document.getElementById('syncBtn');
+  const log = document.getElementById('syncLog');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Importando...';
+  log.style.display = 'block';
+  log.textContent = 'Conectando...\n';
+
+  try {
+    const res = await fetch(url+'?key='+GAS_SECRET+'&desde='+desde+'&hasta='+hasta);
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error);
+    log.textContent += data.total+' registros encontrados\n';
+    let imp=0, upd=0;
+    for (const rec of data.data) {
+      const status = {PRESENTE:'PRESENTE',OK:'PRESENTE','DIA LIBRE':'LIBRE',AUSENTE:'AUSENTE',REPOSO:'REPOSO',FERIADO:'FERIADO',VACACIONES:'VACACIONES',MATERNIDAD:'MATERNIDAD',PERMISO:'PERMISO',CAP:'CAP',RENUNCIA:'RENUNCIA',JUSTIFICADO:'JUSTIFICADO'}[rec.estado]||rec.estado||'PRESENTE';
+      const key = rec.personId+'_'+rec.fecha;
+      const existing = await dbGet('days', key);
+      if (!existing) {
+        await dbPut('days',{key,personId:rec.personId,date:rec.fecha,status,obs:rec.observacion||'',fotoEntrada:rec.fotoEntrada||null,fotoAlmuerzo:rec.fotoAlmuerzo||null,fotoSalida:rec.fotoSalida||null,horaEntrada:rec.horaEntrada||'',horaAlmuerzo:rec.horaAlmuerzo||'',horaSalida:rec.horaSalida||'',fuente:'PROMOTOR'});
+        imp++;
+      } else if (existing.fuente !== 'MANUAL_OVERRIDE') {
+        await dbPut('days',{...existing,status,obs:rec.observacion||existing.obs,fotoEntrada:rec.fotoEntrada||existing.fotoEntrada||null,fotoAlmuerzo:rec.fotoAlmuerzo||existing.fotoAlmuerzo||null,fotoSalida:rec.fotoSalida||existing.fotoSalida||null,horaEntrada:rec.horaEntrada||existing.horaEntrada||'',horaAlmuerzo:rec.horaAlmuerzo||existing.horaAlmuerzo||'',horaSalida:rec.horaSalida||existing.horaSalida||'',fuente:'PROMOTOR'});
+        upd++;
+      }
+    }
+    log.textContent += 'Importados: '+imp+' nuevos, '+upd+' actualizados\nListo.';
+    showToast('Importación completa','success');
+    renderHoy(); renderSidebar();
+    if (selectedPersonId) renderNominaForPerson(selectedPersonId);
+  } catch(e) {
+    log.textContent += 'Error: '+e.message;
+    showToast('Error en importación','error');
+  }
+  btn.disabled = false;
+  btn.textContent = 'Importar ahora';
+}
+
+// ══════════════════════════════════════════════
+// UTILS
+// ══════════════════════════════════════════════
+function getDaysInMonth(ym) {
+  const [y,m] = ym.split('-').map(Number);
+  const total = new Date(y,m,0).getDate();
+  const days = [];
+  for (let d=1; d<=total; d++) {
+    const date = y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+    days.push({ date, dayNum:d });
+  }
+  return days;
+}
+
+function getWeeks(days) {
+  const weeks = [];
+  let week = { num:1, days:new Array(7).fill(null) };
+  let weekNum = 1;
+  for (const d of days) {
+    const dow = new Date(d.date+'T12:00:00').getDay();
+    if (dow===0 && week.days.some(x=>x!==null)) {
+      weeks.push(week);
+      weekNum++;
+      week = { num:weekNum, days:new Array(7).fill(null) };
+    }
+    week.days[dow] = d;
+  }
+  if (week.days.some(x=>x!==null)) weeks.push(week);
+  return weeks;
+}
+
+function isFuture(date) { return date > new Date().toISOString().slice(0,10); }
+
+function getMonthLabel(ym) {
+  const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Setiembre','Octubre','Noviembre','Diciembre'];
+  const [y,m] = ym.split('-');
+  return MESES[parseInt(m)-1]+' '+y;
+}
+
+let toastTimer;
+function showToast(msg, type='') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (type?' '+type:'');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ══════════════════════════════════════════════
+// NOMINA SEARCH
+// ══════════════════════════════════════════════
+function filterNomina() {
+  const q = (document.getElementById('nominaSearch').value||'').toLowerCase();
+  const dd = document.getElementById('nominaDropdown');
+  if (!q) { dd.style.display = 'none'; return; }
+  const matches = persons.filter(p => !p.inactive && p.name.toLowerCase().includes(q));
+  if (!matches.length) { dd.style.display = 'none'; return; }
+  dd.innerHTML = matches.map(p => `
+    <div onclick="selectFromNominaSearch('${p.id}')" style="padding:.6rem 1rem;cursor:pointer;border-bottom:1px solid var(--gray-l);display:flex;align-items:center;gap:.65rem;font-size:.82rem;font-weight:500">
+      <div style="width:28px;height:28px;border-radius:50%;background:var(--navy);color:#fff;font-size:.65rem;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${initials(p.name)}</div>
+      <div>
+        <div style="font-weight:600">${formatName(p.name)}</div>
+        <div style="font-size:.7rem;color:var(--gray)">${p.role}</div>
+      </div>
+    </div>
+  `).join('');
+  dd.style.display = 'block';
+}
+
+function selectFromNominaSearch(id) {
+  document.getElementById('nominaSearch').value = '';
+  document.getElementById('nominaDropdown').style.display = 'none';
+  selectedPersonId = id;
+  renderSidebar();
+  renderNominaForPerson(id);
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('#nominaSearchBar')) {
+    const dd = document.getElementById('nominaDropdown');
+    if (dd) dd.style.display = 'none';
+  }
+});
+
+// ══════════════════════════════════════════════
+// START
+// ══════════════════════════════════════════════
+init();
+</script>
+</body>
+</html>
