@@ -257,7 +257,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--navy);
 <header class="hdr">
   <div class="hdr-logo">HONOR <span>·</span> MARCACIONES</div>
   <div class="hdr-dot"></div>
-  <div class="hdr-sync">
+  <div class="hdr-sync" onclick="openConfig()" style="cursor:pointer" title="Click para ver el detalle si dice 'Sin conexión'">
     <div class="sync-dot" id="syncDot"></div>
     <span id="syncLabel">Cargando...</span>
   </div>
@@ -613,7 +613,11 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--navy);
   <div class="config-section">
     <div class="config-title">🔗 URL del Worker (servidor)</div>
     <input class="field-input" id="workerUrlInput" type="text" placeholder="https://honor-marcaciones.masmarkahonor.workers.dev" style="margin-bottom:.5rem">
-    <div style="font-size:.72rem;color:var(--gray)">Se guarda automáticamente en el navegador.</div>
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:.72rem;color:var(--gray)">Se guarda automáticamente en el navegador.</div>
+      <button class="btn-cancel" style="padding:.35rem .7rem;font-size:.72rem" onclick="resetWorkerUrl()">Restablecer por defecto</button>
+    </div>
+    <div id="syncErrorDetail" style="display:none;font-size:.72rem;color:var(--red);margin-top:.5rem;background:var(--red-l);border-radius:6px;padding:.5rem .7rem"></div>
   </div>
 
   <div class="config-section">
@@ -1908,9 +1912,17 @@ async function doSync(url) {
     const mi = String(now.getMinutes()).padStart(2,'0');
     document.getElementById('syncDot').style.background = '#219653';
     document.getElementById('syncLabel').textContent = 'Sync '+h+':'+mi;
+    const detailOk = document.getElementById('syncErrorDetail');
+    if (detailOk) detailOk.style.display = 'none';
   } catch(e) {
     document.getElementById('syncDot').style.background = '#c0392b';
     document.getElementById('syncLabel').textContent = 'Sin conexión';
+    console.error('Error al sincronizar con el Worker (url usada: '+url+'):', e);
+    const detailEl = document.getElementById('syncErrorDetail');
+    if (detailEl) {
+      detailEl.style.display = 'block';
+      detailEl.textContent = 'Último error de sincronización: ' + (e && e.message ? e.message : e) + ' — URL usada: ' + url;
+    }
   }
 }
 
@@ -1924,6 +1936,18 @@ function saveConfig() {
   localStorage.setItem('workerUrl', url);
   closeConfig();
   showToast('Configuración guardada','success');
+  startAutoSync();
+}
+
+// Si alguna vez se guardo por error una URL distinta a la real (typo, url
+// vieja, un espacio de mas en el medio que .trim() no saca) queda pisando
+// el valor por defecto para siempre, y la sincronizacion falla en
+// silencio ("Sin conexion") sin ninguna pista de por que. Esto la borra y
+// vuelve a intentar con la URL correcta.
+function resetWorkerUrl() {
+  localStorage.removeItem('workerUrl');
+  document.getElementById('workerUrlInput').value = WORKER_URL;
+  showToast('URL restablecida al valor por defecto ✓', 'success');
   startAutoSync();
 }
 
