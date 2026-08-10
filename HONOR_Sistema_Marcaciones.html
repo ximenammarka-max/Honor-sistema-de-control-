@@ -916,7 +916,6 @@ function formatName(name) {
 async function renderSidebar() {
   const q = (document.getElementById('sidebarSearch').value||'').toLowerCase();
   const list = document.getElementById('personList');
-  list.innerHTML = '';
 
   const nowPersons = persons.filter(p => {
     if (sidebarFilter === 'activos' && p.inactive) return false;
@@ -925,22 +924,27 @@ async function renderSidebar() {
     return true;
   });
 
-  for (const p of nowPersons) {
+  // Se arma todo el HTML en paralelo (Promise.all) y recien al final se toca el DOM
+  // UNA sola vez. Antes se hacia list.innerHTML='' y despues, dentro del for, se
+  // esperaba getCoverage() persona por persona -- si renderSidebar() se volvia a
+  // llamar mientras la primera pasada todavia estaba en un await (ej. seleccionar
+  // una persona mientras el auto-sync dispara su propio renderSidebar()), la segunda
+  // llamada limpiaba la lista y las dos terminaban agregando filas sobre la misma
+  // lista ya limpiada, duplicando nombres.
+  const items = await Promise.all(nowPersons.map(async p => {
     const cov = await getCoverage(p.id, currentYm);
     const typeLabel = p.type === 'oficina' ? '🏢' : p.type === 'impulso' ? '⚡' : '📍';
-    const div = document.createElement('div');
-    div.className = 'person-item' + (p.id === selectedPersonId ? ' active' : '');
-    div.innerHTML = `
+    return `<div class="person-item${p.id === selectedPersonId ? ' active' : ''}" onclick="selectPerson('${p.id}')">
       <div class="p-avatar">${initials(p.name)}</div>
       <div class="p-info">
         <div class="p-name">${formatName(p.name)}</div>
         <div class="p-role">${typeLabel} ${p.role}</div>
       </div>
       ${cov !== null ? `<div class="p-cov">${cov}%</div>` : ''}
-    `;
-    div.onclick = () => selectPerson(p.id);
-    list.appendChild(div);
-  }
+    </div>`;
+  }));
+
+  list.innerHTML = items.join('');
 }
 
 async function selectPerson(id) {
