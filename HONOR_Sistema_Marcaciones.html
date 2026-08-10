@@ -6,6 +6,8 @@
 <title>HONOR · Sistema de Marcaciones</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pptxgenjs/3.12.0/pptxgen.bundle.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap');
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -1051,6 +1053,8 @@ async function renderNominaForPerson(pid) {
         <button class="btn-action secondary" onclick="openEditPerson('${pid}')">✏️ Editar</button>
         ${p.type !== 'oficina' ? `<button class="btn-action secondary" onclick="openRecibo('${pid}')">📎 Recibo</button>` : ''}
         ${p.type !== 'oficina' ? `<button class="btn-action danger" onclick="generatePDF('${pid}')">⬇ PDF</button>` : ''}
+        ${p.type !== 'oficina' ? `<button class="btn-action secondary" onclick="subirFotosADrive('${pid}')">📸 Fotos a Drive</button>` : ''}
+        ${p.type !== 'oficina' ? `<button class="btn-action secondary" onclick="generarPPT('${pid}')">📊 PPT a Drive</button>` : ''}
         <div class="ph-cov">
           <div class="ph-cov-pct">${cov !== null ? cov+'%' : '—'}</div>
           <div class="ph-cov-lbl">Cobertura</div>
@@ -1810,65 +1814,209 @@ async function generatePDF(pid) {
   win.document.close();
   win.onload = () => { win.focus(); win.print(); };
 
-  // Auto-subir PDF a Drive si hay carpeta configurada
-  await subirPDFaDrive(html, primerNombre, mesLbl, pid);
+  // Genera un PDF real (no el HTML crudo) y lo sube a Drive
+  await generarYSubirPDF(html, mesLbl, ym, primerNombre, pid, p.name);
 }
 
-async function subirPDFaDrive(htmlContent, nombre, mes, pid) {
+// Busca (o crea) la carpeta de esta persona dentro de la carpeta del mes en Drive.
+// La comparten generarYSubirPDF, subirFotosADrive y generarPPT.
+async function obtenerCarpetaPersonaId(pid, ym) {
+  const workerUrl = localStorage.getItem('workerUrl') || WORKER_URL;
+  const res = await fetch(workerUrl + '/generar-reportes?key=' + GAS_SECRET + '&ym=' + ym + '&persona=' + pid);
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error || 'No se pudo obtener la carpeta de Drive');
+  const carpetaId = data.resultados?.[0]?.carpetaId;
+  if (!carpetaId) throw new Error('Sin carpetaId en la respuesta del Worker');
+  return carpetaId;
+}
+
+// Sube cualquier archivo (PDF, foto, PPT...) a una carpeta de Drive ya creada.
+// Reutiliza el endpoint /subir-pdf del Worker, que en realidad es generico: guarda
+// cualquier mimeType/bytes que se le mande. nombreArchivo es opcional -- si no se
+// manda, el Worker arma el nombre viejo "Asistencia_MES_Nombre.ext" (retrocompatible).
+async function subirArchivoADrive({ nombre, mes, carpetaId, dataUrl, mimeType, nombreArchivo }) {
+  const workerUrl = localStorage.getItem('workerUrl') || WORKER_URL;
+  const res = await fetch(workerUrl + '/subir-pdf', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: GAS_SECRET, nombre, mes, carpetaId, pdfBase64: dataUrl, mimeType, nombreArchivo })
+  });
+  return res.json();
+}
+
+// Convierte una foto (URL de Imgur, o ya en base64 si es una foto manual) a data URL.
+async function urlAFotoBase64(url) {
+  if (url.startsWith('data:')) return url;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('No se pudo descargar la foto (' + res.status + ')');
+  const blob = await res.blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+// Genera un PDF real: renderiza cada pagina del reporte a imagen (html2canvas) y arma
+// el PDF con jsPDF -- antes esto subia el HTML crudo con mimeType 'text/html', asi que
+// lo que llegaba a Drive no era un PDF de verdad, solo un archivo de texto mal etiquetado.
+async function generarYSubirPDF(htmlContent, mesLbl, ym, primerNombre, pid, nombreCompleto) {
+  const off = document.createElement('div');
   try {
-    // Convertir HTML a blob para obtener base64
-    // Usamos html2canvas approach via iframe
-    showToast('Subiendo PDF a Drive...', '');
+    showToast('Generando PDF...', '');
 
-    // Crear iframe oculto para capturar el PDF
-    const workerUrl = localStorage.getItem('workerUrl') || WORKER_URL;
+    off.style.cssText = 'position:fixed;left:-99999px;top:0;width:297mm;background:#fff';
+    off.innerHTML = htmlContent.replace(/^[\s\S]*<body>/, '').replace(/<\/body>[\s\S]*$/, '');
+    document.body.appendChild(off);
 
-    // Primero obtener/crear la carpeta del promotor en Drive
-    const MESES = {'Enero':'2026-01','Febrero':'2026-02','Marzo':'2026-03','Abril':'2026-04','Mayo':'2026-05','Junio':'2026-06','Julio':'2026-07','Agosto':'2026-08','Setiembre':'2026-09','Octubre':'2026-10','Noviembre':'2026-11','Diciembre':'2026-12'};
-    const ymPart = Object.entries(MESES).find(([k]) => mes.includes(k));
-    const ym = ymPart ? ymPart[1].slice(0,7) : currentYm;
+    // Esperar a que todas las fotos incrustadas terminen de cargar antes de capturar,
+    // si no html2canvas puede sacar la foto en blanco.
+    const imgs = Array.from(off.querySelectorAll('img'));
+    await Promise.all(imgs.map(img => img.complete ? Promise.resolve() : new Promise(res => { img.onload = res; img.onerror = res; })));
 
-    // Crear carpetas y obtener carpetaId
-    const carpRes = await fetch(workerUrl + '/generar-reportes?key=' + GAS_SECRET + '&ym=' + ym + '&persona=' + pid);
-    const carpData = await carpRes.json();
+    const pageEls = Array.from(off.children).filter(el => el.tagName === 'DIV');
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
-    if (!carpData.ok) {
-      console.log('No se pudo obtener carpeta:', carpData.error);
-      return;
+    for (let i = 0; i < pageEls.length; i++) {
+      const canvas = await html2canvas(pageEls[i], { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+      const imgData = canvas.toDataURL('image/jpeg', 0.85);
+      if (i > 0) pdf.addPage('a4', 'landscape');
+      pdf.addImage(imgData, 'JPEG', 0, 0, 297, 210);
     }
 
-    const carpetaId = carpData.resultados?.[0]?.carpetaId;
-    if (!carpetaId) { console.log('Sin carpetaId'); return; }
+    const pdfDataUrl = pdf.output('datauristring');
+    const carpetaId = await obtenerCarpetaPersonaId(pid, ym);
+    const nombreArchivo = 'Asistencia_' + mesLbl.replace(/ /g, '_') + '_' + primerNombre + '.pdf';
 
-    // Convertir HTML a PDF base64 usando print API del navegador no es directo
-    // Alternativa: subir el HTML como archivo y Drive lo convierte
-    const htmlBlob = new Blob([htmlContent], { type: 'text/html' });
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      const base64 = ev.target.result;
-      const res = await fetch(workerUrl + '/subir-pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          key: GAS_SECRET,
-          nombre: nombre,
-          mes: mes,
-          carpetaId: carpetaId,
-          pdfBase64: base64,
-          mimeType: 'text/html'
-        })
-      });
-      const data = await res.json();
-      if (data.ok) {
-        showToast('Archivo subido a Drive ✓', 'success');
-      } else {
-        console.log('Error subiendo a Drive:', data.error);
+    const data = await subirArchivoADrive({
+      nombre: nombreCompleto, mes: mesLbl, carpetaId,
+      dataUrl: pdfDataUrl, mimeType: 'application/pdf', nombreArchivo,
+    });
+
+    if (data.ok) showToast('PDF subido a Drive ✓', 'success');
+    else showToast('Error al subir el PDF: ' + (data.error || ''), 'error');
+  } catch (e) {
+    console.error('Error en generarYSubirPDF:', e.message);
+    showToast('Error al generar/subir el PDF: ' + e.message, 'error');
+  } finally {
+    if (off.parentNode) document.body.removeChild(off);
+  }
+}
+
+// Sube a Drive, una por una, las fotos de entrada/almuerzo/salida ya cargadas por el
+// promotor en el mes -- hoy viven en Imgur (asi las sube handlePost del Worker), no en
+// Drive. Esto las descarga desde Imgur y las copia a la carpeta de la persona en Drive
+// con un nombre que identifica la fecha y el tipo, para no pisarlas entre si.
+async function subirFotosADrive(pid) {
+  const p = persons.find(x => x.id === pid);
+  if (!p) return;
+  const ym = currentYm;
+  const primerNombre = p.name.split(',')[0].trim();
+  const days = getDaysInMonth(ym);
+  const MESES = ['','ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SETIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+  const [y, m] = ym.split('-');
+  const mesLbl = MESES[parseInt(m)] + ' ' + y;
+
+  showToast('Buscando fotos del mes...', '');
+  let carpetaId;
+  try {
+    carpetaId = await obtenerCarpetaPersonaId(pid, ym);
+  } catch (e) {
+    showToast('No se pudo abrir la carpeta de Drive: ' + e.message, 'error');
+    return;
+  }
+
+  let subidas = 0, fallidas = 0, revisadas = 0;
+  for (const d of days) {
+    const rec = await dbGet('days', pid + '_' + d.date);
+    if (!rec) continue;
+    const fotos = [
+      { url: rec.fotoEntrada, tipo: 'ENTRADA' },
+      { url: rec.fotoAlmuerzo, tipo: 'ALMUERZO' },
+      { url: rec.fotoSalida, tipo: 'SALIDA' },
+      { url: rec.photoData, tipo: 'MANUAL' },
+    ].filter(f => f.url);
+
+    for (const f of fotos) {
+      revisadas++;
+      try {
+        const dataUrl = await urlAFotoBase64(f.url);
+        const nombreArchivo = primerNombre + '_' + d.date + '_' + f.tipo + '.jpg';
+        const data = await subirArchivoADrive({
+          nombre: p.name, mes: mesLbl, carpetaId,
+          dataUrl, mimeType: 'image/jpeg', nombreArchivo,
+        });
+        if (data.ok) subidas++; else fallidas++;
+      } catch (e) {
+        console.error('Error subiendo foto', d.date, f.tipo, e.message);
+        fallidas++;
       }
-    };
-    reader.readAsDataURL(htmlBlob);
+    }
+  }
 
-  } catch(e) {
-    console.log('Error en subirPDFaDrive:', e.message);
+  if (revisadas === 0) showToast('No hay fotos cargadas en ' + mesLbl, '');
+  else showToast('Fotos a Drive: ' + subidas + ' subidas' + (fallidas ? ', ' + fallidas + ' con error' : '') + ' ✓', fallidas ? 'error' : 'success');
+}
+
+// Genera una presentacion PPTX (una diapositiva por dia con foto) y la sube a Drive.
+// pptxgenjs ya estaba cargado en la pagina pero nunca se usaba.
+async function generarPPT(pid) {
+  const p = persons.find(x => x.id === pid);
+  if (!p) return;
+  const ym = currentYm;
+  const primerNombre = p.name.split(',')[0].trim();
+  const days = getDaysInMonth(ym);
+  const MESES = ['','ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SETIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+  const [y, m] = ym.split('-');
+  const mesLbl = MESES[parseInt(m)] + ' ' + y;
+
+  showToast('Armando la presentación...', '');
+  try {
+    const pptx = new pptxgen();
+    pptx.defineLayout({ name: 'HONOR', width: 10, height: 5.63 });
+    pptx.layout = 'HONOR';
+
+    let diasConFoto = 0;
+    for (const d of days) {
+      const rec = await dbGet('days', pid + '_' + d.date);
+      const fotoUrl = rec?.fotoEntrada || rec?.photoData || null;
+      if (!fotoUrl) continue;
+      diasConFoto++;
+
+      const slide = pptx.addSlide();
+      slide.background = { color: '1A1F3A' };
+      slide.addText('HONOR', { x: 0.3, y: 0.2, fontSize: 20, bold: true, color: 'C9A84C' });
+      slide.addText(p.name + '  ·  ' + d.date + '  ·  ' + (STATUS_LABELS[rec?.status] || 'Sin registrar'),
+        { x: 0.3, y: 0.7, fontSize: 12, color: 'FFFFFF' });
+
+      try {
+        const dataUrl = await urlAFotoBase64(fotoUrl);
+        slide.addImage({ data: dataUrl, x: 0.3, y: 1.1, w: 9.4, h: 4.3, sizing: { type: 'contain', w: 9.4, h: 4.3 } });
+      } catch (e) {
+        slide.addText('(No se pudo cargar la foto)', { x: 0.3, y: 2.5, fontSize: 14, color: 'FF6666' });
+      }
+    }
+
+    if (diasConFoto === 0) { showToast('No hay fotos cargadas en ' + mesLbl, ''); return; }
+
+    const pptxBase64 = await pptx.write({ outputType: 'base64' });
+    const carpetaId = await obtenerCarpetaPersonaId(pid, ym);
+    const nombreArchivo = 'Asistencia_' + mesLbl.replace(/ /g, '_') + '_' + primerNombre + '.pptx';
+
+    const data = await subirArchivoADrive({
+      nombre: p.name, mes: mesLbl, carpetaId,
+      dataUrl: 'data:application/vnd.openxmlformats-officedocument.presentationml.presentation;base64,' + pptxBase64,
+      mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      nombreArchivo,
+    });
+
+    if (data.ok) showToast('PPT subido a Drive ✓', 'success');
+    else showToast('Error al subir el PPT: ' + (data.error || ''), 'error');
+  } catch (e) {
+    console.error('Error en generarPPT:', e.message);
+    showToast('Error al generar/subir el PPT: ' + e.message, 'error');
   }
 }
 
