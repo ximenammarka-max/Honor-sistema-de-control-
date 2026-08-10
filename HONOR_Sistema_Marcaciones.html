@@ -1055,17 +1055,22 @@ async function renderNominaForPerson(pid) {
     </div>
   `;
 
-  // Populate month selector
+  // Populate month selector -- incluye el año actual y los 2 anteriores, para poder
+  // llegar a registros viejos (ej. para revisar/limpiar una foto mal asociada de hace
+  // mas de un año), no solo el año en curso.
   const sel = document.getElementById('nominaMonth');
   const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Setiembre','Octubre','Noviembre','Diciembre'];
   const now = new Date();
   sel.innerHTML = '';
-  for (let m = 0; m < 12; m++) {
-    const ym = now.getFullYear() + '-' + String(m+1).padStart(2,'0');
-    const opt = document.createElement('option');
-    opt.value = ym; opt.textContent = MONTHS[m] + ' ' + now.getFullYear();
-    if (ym === currentYm) opt.selected = true;
-    sel.appendChild(opt);
+  for (let yOff = 2; yOff >= 0; yOff--) {
+    const year = now.getFullYear() - yOff;
+    for (let m = 0; m < 12; m++) {
+      const ym = year + '-' + String(m+1).padStart(2,'0');
+      const opt = document.createElement('option');
+      opt.value = ym; opt.textContent = MONTHS[m] + ' ' + year;
+      if (ym === currentYm) opt.selected = true;
+      sel.appendChild(opt);
+    }
   }
 
   await renderCalendar(pid, currentYm);
