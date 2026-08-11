@@ -1960,46 +1960,121 @@ async function subirFotosADrive(pid) {
   else showToast('Fotos a Drive: ' + subidas + ' subidas' + (fallidas ? ', ' + fallidas + ' con error' : '') + ' ✓', fallidas ? 'error' : 'success');
 }
 
-// Genera una presentacion PPTX (una diapositiva por dia con foto) y la sube a Drive.
-// pptxgenjs ya estaba cargado en la pagina pero nunca se usaba.
+// Genera una presentacion PPTX con el mismo diseño que el PDF (generatePDF):
+// una diapositiva resumen del mes + una diapositiva por semana con la grilla
+// de 7 fotos -- antes el PPT tenia un formato totalmente distinto (una
+// diapositiva por foto, fondo azul liso, sin la grilla ni los colores de
+// estado), asi que no quedaba consistente con el PDF.
+const STATUS_BG_PPT = {PRESENTE:'D4F5E2',AUSENTE:'FDE8E8',LIBRE:'DBEAFE',REPOSO:'FEF3C7',JUSTIFICADO:'EDE9FE',FERIADO:'EDE9FE',VACACIONES:'CFFAFE',MATERNIDAD:'FCE7F3',PERMISO:'FEF3C7',CAP:'DBEAFE',RENUNCIA:'F3F4F6'};
+const STATUS_TC_PPT = {PRESENTE:'1A7A42',AUSENTE:'B71C1C',LIBRE:'1E40AF',REPOSO:'92400E',JUSTIFICADO:'5B21B6',FERIADO:'4A1D96',VACACIONES:'0E7490',MATERNIDAD:'BE185D',PERMISO:'92400E',CAP:'1E3A8A',RENUNCIA:'6B7280'};
+const DOW_SHORT_PPT = ['DO','LU','MA','MI','JU','VI','SÁ'];
+
 async function generarPPT(pid) {
   const p = persons.find(x => x.id === pid);
   if (!p) return;
   const ym = currentYm;
   const primerNombre = p.name.split(',')[0].trim();
   const days = getDaysInMonth(ym);
+  const weeks = getWeeks(days);
   const MESES = ['','ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SETIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
   const [y, m] = ym.split('-');
   const mesLbl = MESES[parseInt(m)] + ' ' + y;
 
   showToast('Armando la presentación...', '');
   try {
+    // Mismas proporciones que la pagina A4 apaisada del PDF (297x210mm).
+    const W = 11.69, H = 8.27, PAD = 0.3;
+    const AW = W - PAD * 2;
     const pptx = new PptxGenJS();
-    pptx.defineLayout({ name: 'HONOR', width: 10, height: 5.63 });
-    pptx.layout = 'HONOR';
+    pptx.defineLayout({ name: 'HONOR_A4', width: W, height: H });
+    pptx.layout = 'HONOR_A4';
 
-    let diasConFoto = 0;
-    for (const d of days) {
-      const rec = await dbGet('days', pid + '_' + d.date);
-      const fotoUrl = rec?.fotoEntrada || rec?.photoData || null;
-      if (!fotoUrl) continue;
-      diasConFoto++;
+    // Traer todos los registros del mes una sola vez (se reusan en el
+    // resumen y en cada semana en vez de volver a consultar IndexedDB).
+    const recsByDate = {};
+    for (const d of days) recsByDate[d.date] = await dbGet('days', pid + '_' + d.date);
 
-      const slide = pptx.addSlide();
-      slide.background = { color: '1A1F3A' };
-      slide.addText('HONOR', { x: 0.3, y: 0.2, fontSize: 20, bold: true, color: 'C9A84C' });
-      slide.addText(p.name + '  ·  ' + d.date + '  ·  ' + (STATUS_LABELS[rec?.status] || 'Sin registrar'),
-        { x: 0.3, y: 0.7, fontSize: 12, color: 'FFFFFF' });
-
-      try {
-        const dataUrl = await urlAFotoBase64(fotoUrl);
-        slide.addImage({ data: dataUrl, x: 0.3, y: 1.1, w: 9.4, h: 4.3, sizing: { type: 'contain', w: 9.4, h: 4.3 } });
-      } catch (e) {
-        slide.addText('(No se pudo cargar la foto)', { x: 0.3, y: 2.5, fontSize: 14, color: 'FF6666' });
-      }
+    function agregarHeader(slide, tituloCentro, subCentro) {
+      slide.addShape('rect', { x: 0, y: 0, w: W, h: 0.85, fill: { color: '1A1F3A' } });
+      slide.addText('HONOR', { x: PAD, y: 0.12, w: 3, h: 0.3, fontSize: 18, bold: true, color: 'C9A84C', charSpacing: 3 });
+      slide.addText(p.name, { x: PAD, y: 0.45, w: 5, h: 0.22, fontSize: 11, bold: true, color: 'FFFFFF' });
+      slide.addText(p.role || '', { x: PAD, y: 0.66, w: 5, h: 0.16, fontSize: 8, color: '8A8EA8' });
+      slide.addText(tituloCentro, { x: W / 2 - 2.5, y: 0.14, w: 5, h: 0.25, fontSize: 13, bold: true, color: 'C9A84C', align: 'center' });
+      if (subCentro) slide.addText(subCentro, { x: W / 2 - 2.5, y: 0.42, w: 5, h: 0.2, fontSize: 9, color: 'FFFFFF', align: 'center' });
+      slide.addText(mesLbl, { x: W - PAD - 3, y: 0.14, w: 3, h: 0.2, fontSize: 9, bold: true, color: 'C9A84C', align: 'right' });
     }
 
-    if (diasConFoto === 0) { showToast('No hay fotos cargadas en ' + mesLbl, ''); return; }
+    // ── Diapositiva 1: resumen del mes (misma grilla que la pagina 1 del PDF) ──
+    const presCount = days.filter(d => recsByDate[d.date]?.status === 'PRESENTE').length;
+    const ausCount = days.filter(d => recsByDate[d.date]?.status === 'AUSENTE').length;
+    const slideResumen = pptx.addSlide();
+    slideResumen.background = { color: 'FFFFFF' };
+    agregarHeader(slideResumen, 'PLANILLA DE ASISTENCIA', `Presentes: ${presCount}  ·  Ausentes: ${ausCount}  ·  Total: ${days.length} días`);
+
+    const cols = Math.min(days.length, 16);
+    const cw = AW / cols, ch = 0.85;
+    days.forEach((d, i) => {
+      const rec = recsByDate[d.date];
+      const dow = new Date(d.date + 'T12:00:00').getDay();
+      const st = rec?.status || '';
+      const lbl = STATUS_LABELS[st] || '—';
+      const bg = STATUS_BG_PPT[st] || 'F5F5F5';
+      const tc = STATUS_TC_PPT[st] || 'BBBBBB';
+      const col = i % cols, row = Math.floor(i / cols);
+      const x = PAD + col * cw, yy = 1.1 + row * ch;
+      slideResumen.addShape('rect', { x, y: yy, w: cw - 0.03, h: ch - 0.03, fill: { color: bg }, line: { color: 'E0E3F0', width: 0.5 } });
+      slideResumen.addText(DOW_SHORT_PPT[dow], { x, y: yy + 0.02, w: cw - 0.03, h: 0.18, fontSize: 6, color: '888888', align: 'center' });
+      slideResumen.addText(String(d.dayNum), { x, y: yy + 0.19, w: cw - 0.03, h: 0.3, fontSize: 12, bold: true, color: '1A1F3A', align: 'center' });
+      slideResumen.addText(lbl, { x, y: yy + 0.54, w: cw - 0.03, h: 0.25, fontSize: 6, bold: true, color: tc, align: 'center' });
+    });
+
+    // ── Una diapositiva por semana, grilla de 7 fotos (igual que el PDF) ──
+    for (const week of weeks) {
+      const validDays = week.days.filter(Boolean);
+      if (!validDays.length) continue;
+      const fd = validDays[0].date.slice(8), ld = validDays[validDays.length - 1].date.slice(8);
+      const slide = pptx.addSlide();
+      slide.background = { color: 'FFFFFF' };
+      agregarHeader(slide, `SEMANA ${week.num}`, `${fd}/${m}/${y} — ${ld}/${m}/${y}`);
+
+      const cw7 = AW / 7, cellY = 1.1, fotoH = 4.6;
+      for (let di = 0; di < 7; di++) {
+        const d = week.days[di];
+        if (!d) continue;
+        const x = PAD + di * cw7;
+        const rec = recsByDate[d.date];
+        const st = rec?.status || '';
+        const lbl = STATUS_LABELS[st] || 'Sin registrar';
+        const bg = STATUS_BG_PPT[st] || 'FAFAFA';
+        const tc = STATUS_TC_PPT[st] || 'BBBBBB';
+        const fotoUrl = rec?.fotoEntrada || rec?.photoData || null;
+
+        slide.addShape('rect', { x, y: cellY, w: cw7 - 0.05, h: 0.35, fill: { color: '1A1F3A' } });
+        slide.addText(`${DOW_SHORT_PPT[di]} ${d.dayNum}`, { x, y: cellY, w: cw7 - 0.05, h: 0.35, fontSize: 9, bold: true, color: 'C9A84C', align: 'center', valign: 'middle' });
+
+        const fotoY = cellY + 0.35;
+        if (fotoUrl) {
+          try {
+            const dataUrl = await urlAFotoBase64(fotoUrl);
+            slide.addImage({ data: dataUrl, x, y: fotoY, w: cw7 - 0.05, h: fotoH, sizing: { type: 'cover', w: cw7 - 0.05, h: fotoH } });
+          } catch (e) {
+            slide.addShape('rect', { x, y: fotoY, w: cw7 - 0.05, h: fotoH, fill: { color: 'F0F1F8' } });
+            slide.addText('📷', { x, y: fotoY, w: cw7 - 0.05, h: fotoH, fontSize: 24, align: 'center', valign: 'middle' });
+          }
+        } else {
+          slide.addShape('rect', { x, y: fotoY, w: cw7 - 0.05, h: fotoH, fill: { color: 'F0F1F8' } });
+          slide.addText('📷', { x, y: fotoY, w: cw7 - 0.05, h: fotoH, fontSize: 24, color: 'CCCCCC', align: 'center', valign: 'middle' });
+        }
+
+        const estadoY = fotoY + fotoH;
+        slide.addShape('rect', { x, y: estadoY, w: cw7 - 0.05, h: 0.3, fill: { color: bg } });
+        slide.addText(lbl, { x, y: estadoY, w: cw7 - 0.05, h: 0.3, fontSize: 7, bold: true, color: tc, align: 'center', valign: 'middle' });
+
+        if (rec?.horaEntrada) {
+          slide.addText(`🟢${rec.horaEntrada}${rec.horaSalida ? '  🔴' + rec.horaSalida : ''}`, { x, y: estadoY + 0.3, w: cw7 - 0.05, h: 0.25, fontSize: 6.5, color: '555555', align: 'center' });
+        }
+      }
+    }
 
     const pptxBase64 = await pptx.write({ outputType: 'base64' });
     const carpetaId = await obtenerCarpetaPersonaId(pid, ym);
