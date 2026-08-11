@@ -1879,11 +1879,25 @@ async function generarYSubirPDF(htmlContent, mesLbl, ym, primerNombre, pid, nomb
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
+    // Cada pagina se captura con su alto real (el div mide 297mm de ancho
+    // pero el alto es automatico segun el contenido, no necesariamente
+    // 210mm) -- si se la estira a la fuerza a 297x210 para llenar la hoja,
+    // las fotos y recuadros salen alargados. Se ajusta manteniendo la
+    // proporcion real de lo capturado y se centra en la pagina A4, en vez
+    // de deformar el contenido para que "llene" el hueco.
+    const PAGE_W = 297, PAGE_H = 210;
     for (let i = 0; i < pageEls.length; i++) {
       const canvas = await html2canvas(pageEls[i], { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
       const imgData = canvas.toDataURL('image/jpeg', 0.85);
       if (i > 0) pdf.addPage('a4', 'landscape');
-      pdf.addImage(imgData, 'JPEG', 0, 0, 297, 210);
+
+      const ratioCanvas = canvas.width / canvas.height;
+      const ratioPage = PAGE_W / PAGE_H;
+      let w, h;
+      if (ratioCanvas > ratioPage) { w = PAGE_W; h = PAGE_W / ratioCanvas; }
+      else { h = PAGE_H; w = PAGE_H * ratioCanvas; }
+      const offsetX = (PAGE_W - w) / 2, offsetY = (PAGE_H - h) / 2;
+      pdf.addImage(imgData, 'JPEG', offsetX, offsetY, w, h);
     }
 
     const pdfDataUrl = pdf.output('datauristring');
