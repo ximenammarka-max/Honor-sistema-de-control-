@@ -1744,17 +1744,17 @@ async function generatePDF(pid) {
     </div>`;
   }
 
-  // Week pages
-  let weekPages = '';
-  for (let si=0; si<weeks.length; si++) {
-    const wk = weeks[si];
+  // Week pages -- 2 semanas por pagina (menos paginas en total), con la
+  // foto a mitad de alto para que las 2 filas de 7 dias entren comodas.
+  const FOTO_H = 58;
+  async function construirTablaSemana(wk, si) {
     const vd = wk.days.filter(Boolean);
-    if (!vd.length) continue;
+    if (!vd.length) return '';
     const fd = vd[0].date.slice(8), ld = vd[vd.length-1].date.slice(8);
     let dayCells = '';
     for (let di=0; di<7; di++) {
       const d = wk.days[di];
-      if (!d) { dayCells += '<td style="border:1px solid #e0e3f0;padding:3px;width:14%;vertical-align:top"></td>'; continue; }
+      if (!d) { dayCells += '<td style="border:1px solid #e0e3f0;padding:2px;width:14%;vertical-align:top"></td>'; continue; }
       const dow = new Date(d.date+'T12:00:00').getDay();
       const rec = await dbGet('days', p.id+'_'+d.date);
       const st = rec?.status||'';
@@ -1762,23 +1762,33 @@ async function generatePDF(pid) {
       const bg = STATUS_BG[st]||'#fafafa';
       const tc = STATUS_TC[st]||'#bbb';
       const fotoE = rec?.fotoEntrada||rec?.photoData||null;
-      dayCells += `<td style="border:1px solid #e0e3f0;padding:3px;width:14%;vertical-align:top">
-        <div style="background:#1a1f3a;color:#c9a84c;text-align:center;padding:2px;font-size:8px;font-weight:700">${DOW_SHORT[dow]} ${d.dayNum}</div>
-        ${fotoE?`<img src="${fotoE}" style="width:100%;height:120px;object-fit:cover;object-position:center top;display:block">`:`<div style="width:100%;height:120px;background:#f0f1f8;display:flex;align-items:center;justify-content:center;font-size:18px">📷</div>`}
-        <div style="background:${bg};color:${tc};text-align:center;padding:2px;font-size:7.5px;font-weight:700">${lbl}</div>
-        ${rec?.horaEntrada?`<div style="font-size:6.5px;color:#555;text-align:center">🟢${rec.horaEntrada}${rec.horaSalida?' 🔴'+rec.horaSalida:''}</div>`:''}
-        ${rec?.obs?`<div style="font-size:6px;color:#888;text-align:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${rec.obs.slice(0,30)}</div>`:''}
-        ${fotoE?`<div style="background:rgba(26,31,58,.7);color:#c9a84c;font-size:5.5px;padding:1px 3px;font-weight:700">HONOR · ${primerNombre} · ${rec?.horaEntrada||''} · ${d.date.slice(8)}/${m}/${y}</div>`:''}
+      dayCells += `<td style="border:1px solid #e0e3f0;padding:2px;width:14%;vertical-align:top">
+        <div style="background:#1a1f3a;color:#c9a84c;text-align:center;padding:1px;font-size:7px;font-weight:700">${DOW_SHORT[dow]} ${d.dayNum}</div>
+        ${fotoE?`<img src="${fotoE}" style="width:100%;height:${FOTO_H}px;object-fit:cover;object-position:center top;display:block">`:`<div style="width:100%;height:${FOTO_H}px;background:#f0f1f8;display:flex;align-items:center;justify-content:center;font-size:14px">📷</div>`}
+        <div style="background:${bg};color:${tc};text-align:center;padding:1px;font-size:6.5px;font-weight:700">${lbl}</div>
+        ${rec?.horaEntrada?`<div style="font-size:6px;color:#555;text-align:center">🟢${rec.horaEntrada}${rec.horaSalida?' 🔴'+rec.horaSalida:''}</div>`:''}
       </td>`;
     }
+    return `<div style="margin-bottom:5mm">
+      <div style="font-size:9px;font-weight:700;color:#1a1f3a;margin-bottom:2px">SEMANA ${si+1} &nbsp;·&nbsp; ${fd}/${m}/${y} — ${ld}/${m}/${y}</div>
+      <table style="width:100%;border-collapse:collapse"><tr>${dayCells}</tr></table>
+    </div>`;
+  }
+
+  let weekPages = '';
+  for (let wi=0; wi<weeks.length; wi+=2) {
+    const tabla1 = await construirTablaSemana(weeks[wi], wi);
+    const tabla2 = weeks[wi+1] ? await construirTablaSemana(weeks[wi+1], wi+1) : '';
+    if (!tabla1 && !tabla2) continue;
     weekPages += `<div style="width:297mm;padding:7mm 8mm 5mm;page-break-after:always">
       <div style="background:#1a1f3a;color:#fff;border-radius:6px;padding:8px 14px;display:grid;grid-template-columns:1fr 1fr 1fr;align-items:center;margin-bottom:6px">
         <div><div style="font-size:20px;font-weight:700;letter-spacing:3px;color:#c9a84c">HONOR</div><div style="font-size:11px;font-weight:600">${p.name}</div><div style="font-size:9px;color:#8a8ea8">${p.role}</div></div>
-        <div style="text-align:center"><div style="font-size:14px;font-weight:700;color:#c9a84c">SEMANA ${si+1}</div><div style="font-size:9px">${fd}/${m}/${y} — ${ld}/${m}/${y}</div><div style="font-size:8px;color:#8a8ea8">${mesLbl}</div></div>
+        <div style="text-align:center"><div style="font-size:14px;font-weight:700;color:#c9a84c">PLANILLA DE ASISTENCIA</div><div style="font-size:9px">${mesLbl}</div></div>
         <div style="text-align:right"><div style="font-size:9px;font-weight:700;color:#c9a84c">REPORTE FOTOGRÁFICO</div><div style="font-size:8px;color:#8a8ea8">Generado: ${now}</div></div>
       </div>
-      <table style="width:100%;border-collapse:collapse"><tr>${dayCells}</tr></table>
-      <div style="text-align:center;font-size:7px;color:#8a8ea8;border-top:1px solid #e8e9f0;padding-top:4px;margin-top:4px">+Marka Trade Marketing · HONOR Paraguay · ${mesLbl}</div>
+      ${tabla1}
+      ${tabla2}
+      <div style="text-align:center;font-size:7px;color:#8a8ea8;border-top:1px solid #e8e9f0;padding-top:4px;margin-top:2px">+Marka Trade Marketing · HONOR Paraguay · ${mesLbl}</div>
     </div>`;
   }
 
@@ -2042,16 +2052,15 @@ async function generarPPT(pid) {
       slideResumen.addText(lbl, { x, y: yy + 0.54, w: cw - 0.03, h: 0.25, fontSize: 6, bold: true, color: tc, align: 'center' });
     });
 
-    // ── Una diapositiva por semana, grilla de 7 fotos (igual que el PDF) ──
-    for (const week of weeks) {
-      const validDays = week.days.filter(Boolean);
-      if (!validDays.length) continue;
-      const fd = validDays[0].date.slice(8), ld = validDays[validDays.length - 1].date.slice(8);
-      const slide = pptx.addSlide();
-      slide.background = { color: 'FFFFFF' };
-      agregarHeader(slide, `SEMANA ${week.num}`, `${fd}/${m}/${y} — ${ld}/${m}/${y}`);
+    // ── Diapositivas con 2 semanas cada una (menos diapositivas en total) ──
+    const cw7 = AW / 7, fotoH = 2.55, rowH = 3.45;
 
-      const cw7 = AW / 7, cellY = 1.1, fotoH = 4.6;
+    async function dibujarFilaSemana(slide, week, offsetY) {
+      const validDays = week.days.filter(Boolean);
+      if (!validDays.length) return;
+      const fd = validDays[0].date.slice(8), ld = validDays[validDays.length - 1].date.slice(8);
+      slide.addText(`SEMANA ${week.num}  ·  ${fd}/${m}/${y} — ${ld}/${m}/${y}`, { x: PAD, y: offsetY - 0.24, w: AW, h: 0.2, fontSize: 9, bold: true, color: '1A1F3A' });
+
       for (let di = 0; di < 7; di++) {
         const d = week.days[di];
         if (!d) continue;
@@ -2063,31 +2072,42 @@ async function generarPPT(pid) {
         const tc = STATUS_TC_PPT[st] || 'BBBBBB';
         const fotoUrl = rec?.fotoEntrada || rec?.photoData || null;
 
-        slide.addShape('rect', { x, y: cellY, w: cw7 - 0.05, h: 0.35, fill: { color: '1A1F3A' } });
-        slide.addText(`${DOW_SHORT_PPT[di]} ${d.dayNum}`, { x, y: cellY, w: cw7 - 0.05, h: 0.35, fontSize: 9, bold: true, color: 'C9A84C', align: 'center', valign: 'middle' });
+        slide.addShape('rect', { x, y: offsetY, w: cw7 - 0.05, h: 0.28, fill: { color: '1A1F3A' } });
+        slide.addText(`${DOW_SHORT_PPT[di]} ${d.dayNum}`, { x, y: offsetY, w: cw7 - 0.05, h: 0.28, fontSize: 8, bold: true, color: 'C9A84C', align: 'center', valign: 'middle' });
 
-        const fotoY = cellY + 0.35;
+        const fotoY = offsetY + 0.28;
         if (fotoUrl) {
           try {
             const dataUrl = await urlAFotoBase64(fotoUrl);
             slide.addImage({ data: dataUrl, x, y: fotoY, w: cw7 - 0.05, h: fotoH, sizing: { type: 'cover', w: cw7 - 0.05, h: fotoH } });
           } catch (e) {
             slide.addShape('rect', { x, y: fotoY, w: cw7 - 0.05, h: fotoH, fill: { color: 'F0F1F8' } });
-            slide.addText('📷', { x, y: fotoY, w: cw7 - 0.05, h: fotoH, fontSize: 24, align: 'center', valign: 'middle' });
+            slide.addText('📷', { x, y: fotoY, w: cw7 - 0.05, h: fotoH, fontSize: 18, align: 'center', valign: 'middle' });
           }
         } else {
           slide.addShape('rect', { x, y: fotoY, w: cw7 - 0.05, h: fotoH, fill: { color: 'F0F1F8' } });
-          slide.addText('📷', { x, y: fotoY, w: cw7 - 0.05, h: fotoH, fontSize: 24, color: 'CCCCCC', align: 'center', valign: 'middle' });
+          slide.addText('📷', { x, y: fotoY, w: cw7 - 0.05, h: fotoH, fontSize: 18, color: 'CCCCCC', align: 'center', valign: 'middle' });
         }
 
         const estadoY = fotoY + fotoH;
-        slide.addShape('rect', { x, y: estadoY, w: cw7 - 0.05, h: 0.3, fill: { color: bg } });
-        slide.addText(lbl, { x, y: estadoY, w: cw7 - 0.05, h: 0.3, fontSize: 7, bold: true, color: tc, align: 'center', valign: 'middle' });
+        slide.addShape('rect', { x, y: estadoY, w: cw7 - 0.05, h: 0.22, fill: { color: bg } });
+        slide.addText(lbl, { x, y: estadoY, w: cw7 - 0.05, h: 0.22, fontSize: 6, bold: true, color: tc, align: 'center', valign: 'middle' });
 
         if (rec?.horaEntrada) {
-          slide.addText(`🟢${rec.horaEntrada}${rec.horaSalida ? '  🔴' + rec.horaSalida : ''}`, { x, y: estadoY + 0.3, w: cw7 - 0.05, h: 0.25, fontSize: 6.5, color: '555555', align: 'center' });
+          slide.addText(`🟢${rec.horaEntrada}${rec.horaSalida ? '  🔴' + rec.horaSalida : ''}`, { x, y: estadoY + 0.22, w: cw7 - 0.05, h: 0.18, fontSize: 6, color: '555555', align: 'center' });
         }
       }
+    }
+
+    for (let wi = 0; wi < weeks.length; wi += 2) {
+      const semana1 = weeks[wi], semana2 = weeks[wi + 1];
+      if (!semana1?.days.some(Boolean) && !semana2?.days.some(Boolean)) continue;
+      const slide = pptx.addSlide();
+      slide.background = { color: 'FFFFFF' };
+      agregarHeader(slide, 'PLANILLA DE ASISTENCIA', mesLbl);
+
+      if (semana1) await dibujarFilaSemana(slide, semana1, 1.15);
+      if (semana2) await dibujarFilaSemana(slide, semana2, 1.15 + rowH);
     }
 
     const pptxBase64 = await pptx.write({ outputType: 'base64' });
