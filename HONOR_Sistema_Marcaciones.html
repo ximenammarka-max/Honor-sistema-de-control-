@@ -243,13 +243,53 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--navy);
 .empty-state .ico{font-size:2.5rem;margin-bottom:.75rem;}
 .empty-state .msg{font-size:.88rem;}
 
+/* Una tabla ancha (HHEE tiene 11 columnas) rompia el ancho de toda la
+   pagina en el celular -- ahora solo la tabla se desplaza de costado
+   dentro de su propio contenedor, en vez de forzar scroll horizontal en
+   toda la pantalla. */
+#hheeContent{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.hhee-table{min-width:640px;}
+
 /* RESPONSIVE */
 @media(max-width:768px){
-  .sidebar{width:100%;position:relative;top:0;border-right:none;border-bottom:1px solid var(--gray-l);}
-  .main{margin-left:0;}
-  .app-body{flex-direction:column;}
+  /* El header y las tabs usaban position:fixed con una altura fija
+     (94px) reservada en .app-body via margin-top -- en el celular el
+     logo "HONOR · MARCACIONES" no entra en una sola linea y se parte en
+     dos, lo que rompia esa altura fija y tapaba el contenido de abajo.
+     Pasarlos a flujo normal (sin fixed) evita tener que adivinar cuanto
+     mide el header en cada pantalla. */
+  .hdr{position:static;height:auto;flex-wrap:wrap;padding:.5rem .75rem;row-gap:.3rem;}
+  .hdr-logo{font-size:.85rem;}
+  .hdr-sync{font-size:.62rem;}
+  .hdr-btn{padding:.3rem .6rem;font-size:.68rem;}
+  .nav-tabs{position:static;height:auto;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:0 .5rem;}
+  .nav-tab{padding:.55rem .7rem;font-size:.72rem;flex-shrink:0;}
+
+  .app-body{margin-top:0;flex-direction:column;height:auto;overflow:visible;}
+  .sidebar{width:100%;position:static;height:auto;max-height:none;border-right:none;border-bottom:1px solid var(--gray-l);}
+  #personList{max-height:280px;}
+  .main{margin-left:0;padding:.85rem;height:auto;overflow:visible;}
+
   .stats-row{grid-template-columns:repeat(2,1fr);}
-  .days-grid{grid-template-columns:repeat(4,1fr);}
+  .days-grid{grid-template-columns:repeat(3,1fr);gap:.4rem;}
+  .day-card{min-height:82px;}
+
+  .person-hdr{flex-wrap:wrap;}
+  .ph-actions{margin-left:0;width:100%;}
+  .btn-action{flex:1;justify-content:center;}
+
+  /* Los botones de confirmar/cancelar en fila quedaban muy chicos para
+     tocar con el dedo -- apilados y a todo el ancho son mas faciles de
+     usar, y el orden invertido deja "Guardar" arriba (mas a mano). */
+  .modal-actions{flex-direction:column-reverse;}
+  .modal-actions button{width:100%;}
+}
+
+@media(max-width:480px){
+  .hoy-grid{grid-template-columns:1fr;}
+  .days-grid{grid-template-columns:repeat(2,1fr);}
+  .hdr-logo{font-size:.72rem;}
+  .nav-tab{font-size:.66rem;padding:.5rem .55rem;}
 }
 </style>
 </head>
