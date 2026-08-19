@@ -1254,15 +1254,50 @@ function clearDayPhoto() {
   document.getElementById('btnDelPhoto').style.display = 'none';
 }
 
+// El estado local "LIBRE" se guarda en el Worker/planilla como "DIA LIBRE"
+// -- el resto de los estados usan el mismo texto en ambos lados.
+const ESTADO_LOCAL_A_SHEET = { LIBRE: 'DIA LIBRE' };
+
 async function saveDay() {
   modalState.obs = document.getElementById('obsInput').value;
   if (!modalState.status) { showToast('Seleccioná un estado','error'); return; }
   const key = modalState.personId+'_'+modalState.date;
   const existing = await dbGet('days', key) || {};
+
+  // Antes esto SOLO se guardaba en el IndexedDB local del navegador -- otra
+  // persona abriendo el sistema en otra computadora no veia el estado ni la
+  // observacion cargados aca, porque nunca llegaban a la planilla
+  // compartida. Ahora se manda primero al Worker (que lo escribe en Sheets,
+  // mismo endpoint /estado-manual que usa el otro panel) y recien despues
+  // se guarda tambien localmente como cache.
+  const p = persons.find(x => x.id === modalState.personId);
+  let sincronizado = false;
+  try {
+    const res = await fetch(`${WORKER_URL}/estado-manual`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        key: GAS_SECRET,
+        personId: modalState.personId,
+        fecha: modalState.date,
+        estado: ESTADO_LOCAL_A_SHEET[modalState.status] || modalState.status,
+        observacion: modalState.obs,
+        nombre: p ? p.name : '',
+        ci: p ? p.ci : '',
+        cargo: p ? p.role : '',
+      }),
+    });
+    const data = await res.json().catch(() => null);
+    sincronizado = !!(data && data.ok);
+    if (!sincronizado) console.error('estado-manual respondió sin ok:', data);
+  } catch (e) {
+    console.error('No se pudo sincronizar el estado con el servidor:', e);
+  }
+
   await dbPut('days', { ...existing, key, personId:modalState.personId, date:modalState.date,
     status:modalState.status, obs:modalState.obs, photoData:modalState.photoData, fuente:'MANUAL_OVERRIDE' });
   closeDayModal();
-  showToast('Guardado','success');
+  showToast(sincronizado ? 'Guardado' : 'Guardado local -- no se pudo sincronizar con el servidor, otras personas no lo verán todavía', sincronizado ? 'success' : 'error');
   renderNominaForPerson(modalState.personId);
   renderSidebar();
 }
