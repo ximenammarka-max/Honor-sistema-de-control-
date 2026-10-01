@@ -574,11 +574,11 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--navy);
     </div>
     <div class="field-group">
       <label class="field-label">Hora entrada</label>
-      <input class="field-input" id="hheeEntrada" type="time">
+      <input class="field-input" id="hheeEntrada" type="time" oninput="calcularHheeAuto()">
     </div>
     <div class="field-group">
       <label class="field-label">Hora salida</label>
-      <input class="field-input" id="hheeSalida" type="time">
+      <input class="field-input" id="hheeSalida" type="time" oninput="calcularHheeAuto()">
     </div>
     <div class="field-group">
       <label class="field-label">HS Diurnas</label>
@@ -1513,6 +1513,50 @@ function handleHheePhoto(e, tipo) {
   };
   reader.readAsDataURL(file);
   e.target.value = '';
+}
+
+// Corte nocturno 20:00-05:00 (Codigo del Trabajo PY). Calcula diurno/
+// nocturno/total a partir de entrada/salida, manejando turnos que cruzan
+// medianoche (salida <= entrada se interpreta como el dia siguiente). Los
+// campos quedan editables igual, por si hace falta un ajuste manual puntual.
+function calcularHoras(entrada, salida) {
+  if (!entrada || !salida) return null;
+  const [eh, em] = entrada.split(':').map(Number);
+  const [sh, sm] = salida.split(':').map(Number);
+  const inicio = eh * 60 + em;
+  let fin = sh * 60 + sm;
+  if (fin <= inicio) fin += 24 * 60;
+
+  let nocturnoMin = 0;
+  // Arranca una ventana de 24hs antes de "inicio" para no perderse el tramo
+  // nocturno que empezo el dia anterior (ej. entrada 04:00 -- el nocturno
+  // 20:00->05:00 de ayer todavia cubre esa hora).
+  for (let base = Math.floor(inicio / 1440) * 1440 - 1440; base < fin; base += 1440) {
+    const nocheIni = base + 20 * 60;
+    const nocheFin = base + 24 * 60 + 5 * 60;
+    const solapIni = Math.max(inicio, nocheIni);
+    const solapFin = Math.min(fin, nocheFin);
+    if (solapFin > solapIni) nocturnoMin += solapFin - solapIni;
+  }
+  const totalMin = fin - inicio;
+  const diurnoMin = totalMin - nocturnoMin;
+  return { diurnoMin, nocturnoMin, totalMin };
+}
+
+function formatHM(min) {
+  const h = Math.floor(min / 60);
+  const m = Math.round(min % 60);
+  return `${h}:${String(m).padStart(2, '0')}`;
+}
+
+function calcularHheeAuto() {
+  const entrada = document.getElementById('hheeEntrada').value;
+  const salida = document.getElementById('hheeSalida').value;
+  const r = calcularHoras(entrada, salida);
+  if (!r) return;
+  document.getElementById('hheeDiurno').value = formatHM(r.diurnoMin);
+  document.getElementById('hheeNocturno').value = formatHM(r.nocturnoMin);
+  document.getElementById('hheeTotal').value = formatHM(r.totalMin);
 }
 
 async function saveHhee() {
