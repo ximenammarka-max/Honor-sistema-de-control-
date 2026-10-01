@@ -391,6 +391,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--navy);
     <button class="btn-action" onclick="openHheeModal(null)" style="background:var(--green)">+ Agregar HHEE</button>
     <button class="btn-action secondary" onclick="exportHheeExcel()">⬇ Excel HHEE</button>
     <button class="btn-action danger" onclick="generateHheePDF()">⬇ PDF HHEE</button>
+    <button class="btn-action gold" id="btnHheeDrive" onclick="subirHheeADrive()">📁 HHEE a Drive</button>
   </div>
   <div id="hheeContent"></div>
 </div>
@@ -1937,6 +1938,110 @@ async function generatePDF(pid) {
   await generarYSubirPDF(html, mesLbl, ym, primerNombre, pid, p.name);
 }
 
+// Arma el HTML de una pagina HHEE para UNA persona (mismas tarjetas que
+// generateHheePDF, pero una sola persona por pagina) -- lo usa
+// subirHheeADrive para generar un PDF por persona y subirlo a su carpeta,
+// igual que ya se hace con Asistencia y las fotos del mes.
+function construirHtmlHheePersona(nombre, pRows, mesLbl) {
+  const totalMins = pRows.reduce((acc, r) => {
+    if (!r.total) return acc;
+    const [hh, mm] = r.total.split(':').map(Number);
+    return acc + hh * 60 + (mm || 0);
+  }, 0);
+  const th = Math.floor(totalMins / 60), tm = totalMins % 60;
+
+  let cards = '';
+  for (const r of pRows) {
+    const [, fm, fd] = r.fecha.split('-');
+    cards += `<div class="card">
+      <div class="card-photos">
+        ${r.photoEntrada ? `<img class="card-photo" src="${r.photoEntrada}">` : `<div class="card-photo-empty">📷</div>`}
+        ${r.photoSalida ? `<img class="card-photo" src="${r.photoSalida}">` : `<div class="card-photo-empty">📷</div>`}
+      </div>
+      <div class="card-info">
+        <div style="font-weight:700">${fd}/${fm} · ${r.dia || ''}</div>
+        <div>${r.sucursal || '—'}</div>
+        <div>${r.entrada || '—'} → ${r.salida || '—'}</div>
+        <span class="card-total">${r.total || '—'}</span>
+      </div>
+    </div>`;
+  }
+
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif}
+  .page{width:210mm;padding:10mm;page-break-after:always}
+  .hdr{background:#1a1f3a;color:#fff;padding:8px 12px;border-radius:6px;margin-bottom:10px;display:flex;justify-content:space-between}
+  .hdr-title{font-size:14px;font-weight:700;color:#c9a84c}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .card{border:1px solid #e0e3f0;border-radius:6px;overflow:hidden}
+  .card-photos{display:grid;grid-template-columns:1fr 1fr}
+  .card-photo{width:100%;height:70px;object-fit:cover}
+  .card-photo-empty{width:100%;height:70px;background:#f0f1f8;display:flex;align-items:center;justify-content:center;color:#ccc}
+  .card-info{padding:5px 7px;font-size:8px}
+  .card-total{background:#1a1f3a;color:#c9a84c;font-weight:700;padding:1px 5px;border-radius:3px;font-size:8px;display:inline-block}
+  </style></head><body>
+  <div class="page">
+    <div class="hdr">
+      <div><div class="hdr-title">HONOR · HORAS EXTRA</div><div style="font-size:10px">${mesLbl}</div></div>
+      <div style="text-align:right"><div style="font-size:12px;font-weight:700">${nombre}</div>
+        <div style="font-size:9px;color:#8a8ea8">Total: ${th}h${tm > 0 ? ' ' + tm + 'min' : ''}</div></div>
+    </div>
+    <div class="grid">${cards}</div>
+  </div>
+  </body></html>`;
+}
+
+// Sube a Drive, una por persona, un PDF de HHEE del mes (mismas tarjetas que
+// "PDF HHEE" pero en la carpeta de cada promotor, como ya se hace con
+// Asistencia/Fotos/PPT) -- respeta el mismo filtro de persona del selector
+// de arriba.
+async function subirHheeADrive() {
+  const ym = document.getElementById('monthSelectHhee').value;
+  const pf = document.getElementById('personFilterHhee').value;
+  let rows = (await dbGetAll('hhee')).filter(r => r.ym === ym);
+  if (pf !== 'all') rows = rows.filter(r => r.personId === pf);
+  if (!rows.length) { showToast('Sin registros', 'error'); return; }
+
+  const byPerson = {};
+  for (const r of rows) {
+    if (!byPerson[r.personId]) byPerson[r.personId] = [];
+    byPerson[r.personId].push(r);
+  }
+
+  const [y, m] = ym.split('-');
+  const MESES = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Setiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+  const mesLbl = MESES[parseInt(m)] + ' ' + y;
+
+  const btn = document.getElementById('btnHheeDrive');
+  const textoOriginal = btn.textContent;
+  btn.disabled = true;
+
+  let subidas = 0, fallidas = 0;
+  for (const [pid, pRows] of Object.entries(byPerson)) {
+    const nombreCompleto = pRows[0].nombre || pid;
+    const primerNombre = nombreCompleto.split(',')[0].trim();
+    btn.textContent = 'Subiendo ' + primerNombre + '...';
+    try {
+      const html = construirHtmlHheePersona(nombreCompleto, pRows, mesLbl);
+      const pdfDataUrl = await htmlAPdfDataUrl(html, { orientation: 'portrait' });
+      const carpetaId = await obtenerCarpetaPersonaId(pid, ym);
+      const nombreArchivo = 'HHEE_' + mesLbl.replace(/ /g, '_') + '_' + primerNombre + '.pdf';
+      const data = await subirArchivoADrive({
+        nombre: nombreCompleto, mes: mesLbl, carpetaId,
+        dataUrl: pdfDataUrl, mimeType: 'application/pdf', nombreArchivo,
+      });
+      if (data.ok) subidas++; else fallidas++;
+    } catch (e) {
+      fallidas++;
+      console.error('Error subiendo HHEE a Drive de', pid, e.message);
+    }
+  }
+
+  btn.disabled = false;
+  btn.textContent = textoOriginal;
+  showToast('HHEE a Drive: ' + subidas + ' subidas' + (fallidas ? ', ' + fallidas + ' con error' : '') + ' ✓', fallidas ? 'error' : 'success');
+}
+
 // Busca (o crea) la carpeta de esta persona dentro de la carpeta del mes en Drive.
 // La comparten generarYSubirPDF, subirFotosADrive y generarPPT.
 async function obtenerCarpetaPersonaId(pid, ym) {
@@ -1977,18 +2082,19 @@ async function urlAFotoBase64(url) {
   });
 }
 
-// Genera un PDF real: renderiza cada pagina del reporte a imagen (html2canvas) y arma
-// el PDF con jsPDF -- antes esto subia el HTML crudo con mimeType 'text/html', asi que
-// lo que llegaba a Drive no era un PDF de verdad, solo un archivo de texto mal etiquetado.
-async function generarYSubirPDF(htmlContent, mesLbl, ym, primerNombre, pid, nombreCompleto) {
+// Renderiza cada pagina (cada <div> hijo del body) de un HTML a imagen
+// (html2canvas) y arma un PDF real con jsPDF -- antes se subia el HTML
+// crudo con mimeType 'text/html', asi que lo que llegaba a Drive no era un
+// PDF de verdad, solo un archivo de texto mal etiquetado. orientation
+// 'landscape' (reportes de Asistencia, paginas de 297mm de ancho) o
+// 'portrait' (HHEE, paginas de 210mm de ancho, igual que A4 vertical).
+async function htmlAPdfDataUrl(htmlContent, { orientation = 'landscape' } = {}) {
+  const [PAGE_W, PAGE_H] = orientation === 'landscape' ? [297, 210] : [210, 297];
   const off = document.createElement('div');
+  off.style.cssText = `position:fixed;left:-99999px;top:0;width:${PAGE_W}mm;background:#fff`;
+  off.innerHTML = htmlContent.replace(/^[\s\S]*<body>/, '').replace(/<\/body>[\s\S]*$/, '');
+  document.body.appendChild(off);
   try {
-    showToast('Generando PDF...', '');
-
-    off.style.cssText = 'position:fixed;left:-99999px;top:0;width:297mm;background:#fff';
-    off.innerHTML = htmlContent.replace(/^[\s\S]*<body>/, '').replace(/<\/body>[\s\S]*$/, '');
-    document.body.appendChild(off);
-
     // Esperar a que todas las fotos incrustadas terminen de cargar antes de capturar,
     // si no html2canvas puede sacar la foto en blanco.
     const imgs = Array.from(off.querySelectorAll('img'));
@@ -1996,19 +2102,18 @@ async function generarYSubirPDF(htmlContent, mesLbl, ym, primerNombre, pid, nomb
 
     const pageEls = Array.from(off.children).filter(el => el.tagName === 'DIV');
     const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const pdf = new jsPDF({ orientation, unit: 'mm', format: 'a4' });
 
-    // Cada pagina se captura con su alto real (el div mide 297mm de ancho
+    // Cada pagina se captura con su alto real (el div mide PAGE_W de ancho
     // pero el alto es automatico segun el contenido, no necesariamente
-    // 210mm) -- si se la estira a la fuerza a 297x210 para llenar la hoja,
-    // las fotos y recuadros salen alargados. Se ajusta manteniendo la
-    // proporcion real de lo capturado y se centra en la pagina A4, en vez
-    // de deformar el contenido para que "llene" el hueco.
-    const PAGE_W = 297, PAGE_H = 210;
+    // PAGE_H) -- si se la estira a la fuerza para llenar la hoja, las fotos
+    // y recuadros salen alargados. Se ajusta manteniendo la proporcion real
+    // de lo capturado y se centra en la pagina A4, en vez de deformar el
+    // contenido para que "llene" el hueco.
     for (let i = 0; i < pageEls.length; i++) {
       const canvas = await html2canvas(pageEls[i], { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
       const imgData = canvas.toDataURL('image/jpeg', 0.85);
-      if (i > 0) pdf.addPage('a4', 'landscape');
+      if (i > 0) pdf.addPage('a4', orientation);
 
       const ratioCanvas = canvas.width / canvas.height;
       const ratioPage = PAGE_W / PAGE_H;
@@ -2018,8 +2123,16 @@ async function generarYSubirPDF(htmlContent, mesLbl, ym, primerNombre, pid, nomb
       const offsetX = (PAGE_W - w) / 2, offsetY = (PAGE_H - h) / 2;
       pdf.addImage(imgData, 'JPEG', offsetX, offsetY, w, h);
     }
+    return pdf.output('datauristring');
+  } finally {
+    document.body.removeChild(off);
+  }
+}
 
-    const pdfDataUrl = pdf.output('datauristring');
+async function generarYSubirPDF(htmlContent, mesLbl, ym, primerNombre, pid, nombreCompleto) {
+  try {
+    showToast('Generando PDF...', '');
+    const pdfDataUrl = await htmlAPdfDataUrl(htmlContent, { orientation: 'landscape' });
     const carpetaId = await obtenerCarpetaPersonaId(pid, ym);
     const nombreArchivo = 'Asistencia_' + mesLbl.replace(/ /g, '_') + '_' + primerNombre + '.pdf';
 
@@ -2033,8 +2146,6 @@ async function generarYSubirPDF(htmlContent, mesLbl, ym, primerNombre, pid, nomb
   } catch (e) {
     console.error('Error en generarYSubirPDF:', e.message);
     showToast('Error al generar/subir el PDF: ' + e.message, 'error');
-  } finally {
-    if (off.parentNode) document.body.removeChild(off);
   }
 }
 
