@@ -679,8 +679,13 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--navy);
   <div style="display:flex;gap:.5rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:.75rem">
     <div><label class="field-label">Desde</label><input class="field-input" id="impMarcDesde" type="date" onchange="cargarImpMarcaciones()"></div>
     <div><label class="field-label">Hasta</label><input class="field-input" id="impMarcHasta" type="date" onchange="cargarImpMarcaciones()"></div>
-    <button class="btn-action secondary" onclick="exportImpExcel()" style="margin-left:auto">⬇ Excel</button>
+    <div style="margin-left:auto;display:flex;gap:.4rem;flex-wrap:wrap">
+      <button class="btn-action secondary" onclick="exportImpExcel()">⬇ Excel</button>
+      <button class="btn-action danger" id="btnImpPdf" onclick="descargarImpPDF()">⬇ PDF con fotos</button>
+      <button class="btn-action gold" id="btnImpDrive" onclick="subirImpADrive()">📁 Subir a Drive</button>
+    </div>
   </div>
+  <div id="impDriveLog" style="display:none;font-size:.75rem;background:var(--gray-ll);border-radius:8px;padding:.6rem .8rem;margin-bottom:.75rem;white-space:pre-line;max-height:160px;overflow-y:auto"></div>
   <div id="impMarcContent"></div>
 </div>
 </div>
@@ -1663,6 +1668,7 @@ async function quitarImpPersona(campId, ci) {
 function openImpMarcaciones(id) {
   const c = imp.campanias.find(x => x.id === id);
   impMarc = { camp: c, filas: [] };
+  document.getElementById('impDriveLog').style.display = 'none';
   document.getElementById('impMarcTitle').textContent = '📷 ' + c.nombre;
   document.getElementById('impMarcDesde').value = c.desde || '';
   document.getElementById('impMarcHasta').value = c.hasta || '';
@@ -1809,6 +1815,145 @@ function saveImpDia() {
 function clearImpDia() {
   if (!confirm('¿Limpiar el estado, la observación y la foto manual de este día? Las fotos que marcó la persona no se borran.')) return;
   return impGuardarDia({ limpiar: true }, 'Registro limpiado');
+}
+
+// ── PDF con fotos (mismo estilo que el reporte fotografico de los fijos)
+// Una hoja por persona cada 7 dias trabajados: foto de entrada y de salida,
+// estado, horas y observacion de cada dia.
+const IMP_ST_BG = {PRESENTE:'#d4f5e2',AUSENTE:'#fde8e8',LIBRE:'#dbeafe',REPOSO:'#fef3c7',JUSTIFICADO:'#ede9fe',FERIADO:'#ede9fe',VACACIONES:'#cffafe',MATERNIDAD:'#fce7f3',PERMISO:'#fef3c7',CAP:'#dbeafe',RENUNCIA:'#f3f4f6'};
+const IMP_ST_TC = {PRESENTE:'#1a7a42',AUSENTE:'#b71c1c',LIBRE:'#1e40af',REPOSO:'#92400e',JUSTIFICADO:'#5b21b6',FERIADO:'#4a1d96',VACACIONES:'#0e7490',MATERNIDAD:'#be185d',PERMISO:'#92400e',CAP:'#1e3a8a',RENUNCIA:'#6b7280'};
+
+function impPersonasConFilas() {
+  const por = {};
+  impMarc.filas.forEach(r => (por[r.ci] = por[r.ci] || { ci: r.ci, nombre: r.nombre, filas: [] }).filas.push(r));
+  Object.values(por).forEach(x => x.filas.sort((a, b) => a.fecha.localeCompare(b.fecha)));
+  return Object.values(por).sort((a, b) => a.nombre.localeCompare(b.nombre));
+}
+
+function impPaginasPersona(per) {
+  const c = impMarc.camp;
+  const DOW = ['DO','LU','MA','MI','JU','VI','SÁ'];
+  const hoyLbl = new Date().toLocaleDateString('es-PY', { day:'2-digit', month:'2-digit', year:'numeric' });
+  const trabajados = per.filas.filter(r => r.horaEntrada || r.estado === 'PRESENTE').length;
+  const img = (u, lbl, col, vacio) => u
+    ? `<div style="position:relative"><img src="${impEsc(u)}" style="width:100%;height:105px;object-fit:cover;object-position:center top;display:block">
+         <div style="position:absolute;left:0;bottom:0;background:rgba(26,31,58,.75);color:${col};font-size:6.5px;font-weight:700;padding:1px 4px">${lbl}</div></div>`
+    : `<div style="width:100%;height:105px;background:#f0f1f8;display:flex;align-items:center;justify-content:center;font-size:7px;color:#8a8ea8">${vacio}</div>`;
+  let paginas = '';
+  for (let i = 0; i < per.filas.length; i += 7) {
+    const tramo = per.filas.slice(i, i + 7);
+    let celdas = '';
+    for (let k = 0; k < 7; k++) {
+      const r = tramo[k];
+      if (!r) { celdas += '<td style="border:1px solid #e0e3f0;padding:3px;width:14%;vertical-align:top"></td>'; continue; }
+      const st = r.estado || (r.horaEntrada ? 'PRESENTE' : '');
+      const [y, m, d] = r.fecha.split('-');
+      const manual = !r.fotoEntrada && !r.fotoSalida && r.fotoManual;
+      celdas += `<td style="border:1px solid #e0e3f0;padding:3px;width:14%;vertical-align:top">
+        <div style="background:#1a1f3a;color:#c9a84c;text-align:center;padding:2px;font-size:8px;font-weight:700">${DOW[new Date(r.fecha + 'T12:00:00').getDay()]} ${d}/${m}</div>
+        ${manual ? img(r.fotoManual, '📎 FOTO MANUAL', '#c9a84c') : img(r.fotoEntrada, '🟢 ENTRADA ' + (r.horaEntrada || ''), '#2ecc71', 'Entrada sin foto')}
+        <div style="height:2px"></div>
+        ${img(r.fotoSalida, '🔴 SALIDA ' + (r.horaSalida || ''), '#ff6b5b', 'Salida sin marcar')}
+        <div style="background:${IMP_ST_BG[st] || '#fafafa'};color:${IMP_ST_TC[st] || '#bbb'};text-align:center;padding:2px;font-size:7.5px;font-weight:700">${STATUS_LABELS[st] || 'Sin registrar'}</div>
+        ${impHoras(r.horaEntrada, r.horaSalida) ? `<div style="font-size:6.5px;color:#555;text-align:center">${impHoras(r.horaEntrada, r.horaSalida)} trabajadas</div>` : ''}
+        ${r.observacion ? `<div style="font-size:6px;color:#888;text-align:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${impEsc(r.observacion.slice(0, 34))}</div>` : ''}
+      </td>`;
+    }
+    paginas += `<div style="width:297mm;padding:7mm 8mm 5mm;font-family:Arial,sans-serif">
+      <div style="background:#1a1f3a;color:#fff;border-radius:6px;padding:8px 14px;display:grid;grid-template-columns:1fr 1fr 1fr;align-items:center;margin-bottom:6px">
+        <div><div style="font-size:20px;font-weight:700;letter-spacing:3px;color:#c9a84c">HONOR</div><div style="font-size:11px;font-weight:600">${impEsc(per.nombre)}</div><div style="font-size:9px;color:#8a8ea8">CI ${impEsc(per.ci)} · Impulso</div></div>
+        <div style="text-align:center"><div style="font-size:14px;font-weight:700;color:#c9a84c">${impEsc(c.nombre)}</div><div style="font-size:9px">${impFecha(c.desde)} — ${impFecha(c.hasta)}</div><div style="font-size:8px;color:#8a8ea8">${c.cliente ? impEsc(c.cliente) : ''}</div></div>
+        <div style="text-align:right"><div style="font-size:9px;font-weight:700;color:#c9a84c">REPORTE FOTOGRÁFICO</div><div style="font-size:9px">Días trabajados: ${trabajados}</div><div style="font-size:8px;color:#8a8ea8">Generado: ${hoyLbl}</div></div>
+      </div>
+      <table style="width:100%;border-collapse:collapse"><tr>${celdas}</tr></table>
+      <div style="text-align:center;font-size:7px;color:#8a8ea8;border-top:1px solid #e8e9f0;padding-top:4px;margin-top:4px">+Marka Trade Marketing · HONOR Paraguay · ${impEsc(c.nombre)}</div>
+    </div>`;
+  }
+  return paginas;
+}
+
+// Fotos a base64 antes de armar el PDF (si no, html2canvas puede dejarlas en blanco).
+async function impConFotos(per) {
+  const conv = async u => { if (!u) return u; try { return await urlAFotoBase64(u); } catch (e) { return u; } };
+  const filas = [];
+  for (const r of per.filas) filas.push({ ...r, fotoEntrada: await conv(r.fotoEntrada), fotoSalida: await conv(r.fotoSalida), fotoManual: await conv(r.fotoManual) });
+  return { ...per, filas };
+}
+
+const impHtml = paginas => `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>${paginas}</body></html>`;
+const impArchivo = t => String(t).replace(/,/g, '').replace(/[^\w\- ÁÉÍÓÚÑáéíóúñ]+/g, '').trim().replace(/\s+/g, '_');
+
+function impBoton(id, ocupado, texto) {
+  const b = document.getElementById(id);
+  b.disabled = ocupado;
+  if (!b.dataset.txt) b.dataset.txt = b.textContent;
+  b.textContent = ocupado ? texto : b.dataset.txt;
+}
+
+async function descargarImpPDF() {
+  const pers = impPersonasConFilas();
+  if (!pers.length) { showToast('No hay marcaciones en estas fechas','error'); return; }
+  impBoton('btnImpPdf', true, 'Generando...');
+  try {
+    const conFotos = [];
+    for (const per of pers) conFotos.push(await impConFotos(per));
+    const dataUrl = await htmlAPdfDataUrl(impHtml(conFotos.map(impPaginasPersona).join('')), { orientation: 'landscape' });
+    const a = document.createElement('a');
+    a.href = dataUrl; a.download = 'HONOR_Impulso_' + impArchivo(impMarc.camp.nombre) + '.pdf';
+    document.body.appendChild(a); a.click(); a.remove();
+    showToast('PDF descargado','success');
+  } catch (e) { showToast('No se pudo generar el PDF: ' + e.message,'error'); }
+  impBoton('btnImpPdf', false);
+}
+
+// Sube a Drive, por persona: su PDF y sus fotos (entrada, salida, manual),
+// en IMPULSOS / <campaña> / <persona>.
+async function subirImpADrive() {
+  const pers = impPersonasConFilas();
+  if (!pers.length) { showToast('No hay marcaciones en estas fechas','error'); return; }
+  const c = impMarc.camp;
+  const log = document.getElementById('impDriveLog');
+  log.style.display = 'block'; log.innerHTML = '';
+  const linea = (t, link) => {
+    const d = document.createElement('div'); d.textContent = t; log.appendChild(d);
+    if (link) { const a = document.createElement('a'); a.href = link; a.target = '_blank'; a.textContent = '   → Abrir carpeta';
+      a.style.cssText = 'display:block;color:var(--blue);margin:0 0 4px 8px'; log.appendChild(a); }
+    log.scrollTop = log.scrollHeight;
+  };
+  impBoton('btnImpDrive', true, 'Subiendo...');
+  let ok = 0, err = 0, linkCamp = '';
+  for (const per of pers) {
+    try {
+      linea('⏳ ' + per.nombre + '...');
+      const carp = await impGet(`/impulsos/carpeta?campania=${encodeURIComponent(c.id)}&ci=${per.ci}`);
+      linkCamp = carp.linkCampania || linkCamp;
+      const nombreBase = impArchivo(per.nombre.split(',')[0]);
+      const pdf = await htmlAPdfDataUrl(impHtml(impPaginasPersona(await impConFotos(per))), { orientation: 'landscape' });
+      const r = await subirArchivoADrive({ nombre: per.nombre, mes: c.nombre, carpetaId: carp.carpetaId, dataUrl: pdf,
+        mimeType: 'application/pdf', nombreArchivo: 'Impulso_' + impArchivo(c.nombre) + '_' + nombreBase + '.pdf' });
+      if (!r.ok) throw new Error(r.error || 'no se pudo subir el PDF');
+      let fotos = 0, fallas = 0;
+      for (const f of per.filas) {
+        for (const [u, tipo] of [[f.fotoEntrada, 'ENTRADA'], [f.fotoSalida, 'SALIDA'], [f.fotoManual, 'MANUAL']]) {
+          if (!u) continue;
+          try {
+            const rr = await subirArchivoADrive({ nombre: per.nombre, mes: c.nombre, carpetaId: carp.carpetaId, dataUrl: await urlAFotoBase64(u),
+              mimeType: 'image/jpeg', nombreArchivo: nombreBase + '_' + f.fecha + '_' + tipo + '.jpg' });
+            if (rr.ok) fotos++; else fallas++;
+          } catch (e) { fallas++; }
+        }
+      }
+      log.lastChild.remove();
+      linea('✅ ' + per.nombre + ' · PDF + ' + fotos + ' foto(s)' + (fallas ? ' · ' + fallas + ' foto(s) con error' : ''), carp.link);
+      ok++;
+    } catch (e) {
+      log.lastChild.textContent = '❌ ' + per.nombre + ' — ' + e.message;
+      err++;
+    }
+  }
+  if (linkCamp) linea('📁 Carpeta de la campaña:', linkCamp);
+  showToast('Drive: ' + ok + ' persona(s) subida(s)' + (err ? ', ' + err + ' con error' : '') + (ok ? ' ✓' : ''), err ? 'error' : 'success');
+  impBoton('btnImpDrive', false);
 }
 
 // Campañas viejas que quedaron en el navegador de esta computadora.
