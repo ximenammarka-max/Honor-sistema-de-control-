@@ -1252,6 +1252,7 @@ async function getCoverage(pid, ym) {
 // DAY MODAL
 // ══════════════════════════════════════════════
 async function openDayModal(pid, date) {
+  impVentanaModo(false);
   const p = persons.find(x => x.id === pid);
   const rec = await dbGet('days', pid+'_'+date) || {};
   modalState = { personId:pid, date, status:rec.status||null, obs:rec.obs||'', photoData:rec.photoData||null };
@@ -1335,6 +1336,7 @@ function clearDayPhoto() {
 const ESTADO_LOCAL_A_SHEET = { LIBRE: 'DIA LIBRE' };
 
 async function saveDay() {
+  if (modalState.imp) return saveImpDia();
   modalState.obs = document.getElementById('obsInput').value;
   if (!modalState.status) { showToast('Seleccioná un estado','error'); return; }
   const key = modalState.personId+'_'+modalState.date;
@@ -1379,6 +1381,7 @@ async function saveDay() {
 }
 
 async function clearDay() {
+  if (modalState.imp) return clearImpDia();
   const key = modalState.personId+'_'+modalState.date;
   await dbDelete('days', key);
   closeDayModal();
@@ -1446,7 +1449,7 @@ async function savePerson() {
 // persona en Promotores y se mezclaba con los fijos). Ahora todo vive en la
 // planilla (pestañas Campañas, Impulsadores y MarcacionesImpulso, via el
 // worker) y la persona marca con foto en la misma app, buscandose por cedula.
-let imp = { campanias: [], personas: [], conteo: {}, cargado: false };
+let imp = { campanias: [], personas: [], conteo: {}, filas: {}, cargado: false };
 let impMarc = { camp: null, filas: [] };
 
 const impUrl = () => localStorage.getItem('workerUrl') || WORKER_URL;
@@ -1538,8 +1541,11 @@ async function renderImpulsos(recargar = true) {
     try {
       const [d, m] = await Promise.all([impGet('/impulsos'), impGet('/impulsos/marcaciones')]);
       imp.campanias = d.campanias; imp.personas = d.personas; imp.cargado = true;
-      imp.conteo = {};
-      m.data.forEach(r => { imp.conteo[r.campaniaId] = (imp.conteo[r.campaniaId] || 0) + 1; });
+      imp.conteo = {}; imp.filas = {};
+      m.data.forEach(r => {
+        imp.filas[r.campaniaId] = (imp.filas[r.campaniaId] || 0) + 1;
+        if (r.horaEntrada) imp.conteo[r.campaniaId] = (imp.conteo[r.campaniaId] || 0) + 1;
+      });
     } catch(e) {
       el.innerHTML = `<div class="empty-state"><div class="ico">⚠️</div><div class="msg">No se pudieron traer las campañas: ${impEsc(e.message)}</div></div>`;
       return;
@@ -1573,7 +1579,7 @@ async function renderImpulsos(recargar = true) {
           <button class="btn-action secondary" onclick="openImpPersonas('${c.id}')">+ Personas</button>
           <button class="btn-action secondary" onclick="openAddCampania('${c.id}')">Editar</button>
           <button class="btn-action secondary" onclick="toggleCampania('${c.id}')">${c.activa ? 'Finalizar' : 'Reactivar'}</button>
-          ${dias ? '' : `<button class="btn-action danger" onclick="deleteCampania('${c.id}')">Eliminar</button>`}
+          ${imp.filas[c.id] ? '' : `<button class="btn-action danger" onclick="deleteCampania('${c.id}')">Eliminar</button>`}
         </div>
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:.3rem">
@@ -1692,29 +1698,37 @@ async function cargarImpMarcaciones() {
   if (!dias.length) { el.innerHTML = '<div class="empty-state"><div class="ico">📷</div><div class="msg">Todavía nadie marcó en estas fechas.</div></div>'; return; }
   const foto = url => url ? `<img class="hoy-photo" src="${impEsc(url)}" onclick="window.open('${impEsc(url)}','_blank')" style="cursor:pointer">` : '';
   const DOW = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
-  const tarjeta = r => `
-    <div class="hoy-card">
+  impMarc.tarjetas = [];
+  const tarjeta = r => {
+    const k = impMarc.tarjetas.push(r) - 1;
+    const est = r.estado || (r.horaEntrada ? 'PRESENTE' : '');
+    return `
+    <div class="hoy-card" style="cursor:pointer" onclick="openImpDia(${k})">
       <div class="hoy-card-hdr">
         <div class="hoy-avatar">${initials(r.nombre)}</div>
         <div class="hoy-name">${impEsc(formatName(r.nombre))}</div>
         <div class="p-type-badge p-type-impulso">Impulso</div>
       </div>
       <div class="hoy-body">
-        ${r.horaEntrada ? `
-          <div class="hoy-photos">${foto(r.fotoEntrada) || '<div class="hoy-photo-empty">📷</div>'}${foto(r.fotoSalida)}</div>
+        ${est ? `
+          <div class="hoy-photos">${foto(r.fotoEntrada) || (r.fotoManual ? '' : '<div class="hoy-photo-empty">📷</div>')}${foto(r.fotoSalida)}${foto(r.fotoManual)}</div>
           <div class="hoy-info">
-            <div class="hoy-status s-PRESENTE">OK</div>
-            <div class="hoy-horas">🟢 ${impEsc(r.horaEntrada)}${r.horaSalida ? ' 🔴 ' + impEsc(r.horaSalida) : ''}${impHoras(r.horaEntrada, r.horaSalida) ? ' · ' + impHoras(r.horaEntrada, r.horaSalida) : ''}</div>
-          </div>` : `<div class="hoy-sin">Sin registrar hoy</div>`}
+            <div class="hoy-status s-${impEsc(est)}">${STATUS_LABELS[est] || impEsc(est)}</div>
+            ${r.horaEntrada ? `<div class="hoy-horas">🟢 ${impEsc(r.horaEntrada)}${r.horaSalida ? ' 🔴 ' + impEsc(r.horaSalida) : ''}${impHoras(r.horaEntrada, r.horaSalida) ? ' · ' + impHoras(r.horaEntrada, r.horaSalida) : ''}</div>` : ''}
+            ${r.observacion ? `<div class="hoy-horas" style="color:var(--gray)">${impEsc(r.observacion.slice(0, 40))}</div>` : ''}
+          </div>` : `<div class="hoy-sin">Sin registrar${r.fecha === hoy ? ' hoy' : ''}</div>`}
       </div>
     </div>`;
-  const personas = new Set(impMarc.filas.map(r => r.ci)).size;
-  el.innerHTML = `<div style="font-size:.75rem;color:var(--gray);margin-bottom:.75rem">${impMarc.filas.length} jornada(s) marcada(s) · ${personas} persona(s)</div>` +
+  };
+  const marcadas = impMarc.filas.filter(r => r.horaEntrada);
+  const personas = new Set(marcadas.map(r => r.ci)).size;
+  el.innerHTML = `<div style="font-size:.75rem;color:var(--gray);margin-bottom:.75rem">${marcadas.length} jornada(s) marcada(s) · ${personas} persona(s)</div>` +
     dias.map(f => {
-      const lista = porDia[f].sort((a, b) => (!a.horaEntrada) - (!b.horaEntrada) || a.nombre.localeCompare(b.nombre));
-      const n = lista.filter(r => r.horaEntrada).length;
+      const sinReg = r => !r.horaEntrada && !r.estado;
+      const lista = porDia[f].sort((a, b) => sinReg(a) - sinReg(b) || a.nombre.localeCompare(b.nombre));
+      const n = lista.filter(r => r.horaEntrada).length, sr = lista.filter(sinReg).length;
       return `<div style="font-size:.8rem;font-weight:700;margin:.25rem 0 .5rem">${DOW[new Date(f + 'T12:00:00').getDay()]} ${impFecha(f)}
-          <span style="font-weight:400;color:var(--gray)"> · ${n} marcaron${f === hoy && lista.length > n ? ' · ' + (lista.length - n) + ' sin registrar' : ''}</span></div>
+          <span style="font-weight:400;color:var(--gray)"> · ${n} marcaron${sr ? ' · ' + sr + ' sin registrar' : ''}</span></div>
         <div class="hoy-grid" style="margin-bottom:1.1rem">${lista.map(tarjeta).join('')}</div>`;
     }).join('');
 }
@@ -1722,10 +1736,15 @@ function exportImpExcel() {
   if (!impMarc.filas.length) { showToast('No hay marcaciones para exportar','error'); return; }
   const c = impMarc.camp;
   const filas = [...impMarc.filas].sort((a, b) => a.nombre.localeCompare(b.nombre) || a.fecha.localeCompare(b.fecha));
-  const detalle = [['FECHA','NOMBRE','CI','ENTRADA','SALIDA','HORAS','FOTO ENTRADA','FOTO SALIDA'],
-    ...filas.map(r => [impFecha(r.fecha), r.nombre, r.ci, r.horaEntrada || '', r.horaSalida || '', impHoras(r.horaEntrada, r.horaSalida), r.fotoEntrada || '', r.fotoSalida || ''])];
+  const estLbl = r => STATUS_LABELS[r.estado || (r.horaEntrada ? 'PRESENTE' : '')] || r.estado || '';
+  const detalle = [['FECHA','NOMBRE','CI','ESTADO','ENTRADA','SALIDA','HORAS','OBSERVACIÓN','FOTO ENTRADA','FOTO SALIDA','FOTO MANUAL'],
+    ...filas.map(r => [impFecha(r.fecha), r.nombre, r.ci, estLbl(r), r.horaEntrada || '', r.horaSalida || '', impHoras(r.horaEntrada, r.horaSalida), r.observacion || '', r.fotoEntrada || '', r.fotoSalida || '', r.fotoManual || ''])];
   const porPersona = {};
-  filas.forEach(r => { const x = porPersona[r.ci] = porPersona[r.ci] || { nombre: r.nombre, dias: 0, completos: 0 }; x.dias++; if (r.horaEntrada && r.horaSalida) x.completos++; });
+  filas.forEach(r => {
+    const x = porPersona[r.ci] = porPersona[r.ci] || { nombre: r.nombre, dias: 0, completos: 0 };
+    if ((r.estado || 'PRESENTE') === 'PRESENTE' && (r.horaEntrada || r.estado)) x.dias++;
+    if (r.horaEntrada && r.horaSalida) x.completos++;
+  });
   const resumen = [['NOMBRE','CI','DÍAS TRABAJADOS','DÍAS CON ENTRADA Y SALIDA'],
     ...Object.entries(porPersona).map(([ci, x]) => [x.nombre, ci, x.dias, x.completos])];
   const wb = XLSX.utils.book_new();
@@ -1733,6 +1752,63 @@ function exportImpExcel() {
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(detalle), 'Detalle');
   XLSX.writeFile(wb, 'HONOR_Impulso_' + c.nombre.replace(/[^\w\- ]+/g, '').replace(/\s+/g, '_') + '.xlsx');
   showToast('Excel descargado','success');
+}
+
+// ── Ventana del dia (misma que la de los fijos), sin Almuerzo
+function impVentanaModo(esImp) {
+  const colA = document.getElementById('photoAlmuerzoWrap').parentElement;
+  colA.style.display = esImp ? 'none' : '';
+  colA.parentElement.style.gridTemplateColumns = esImp ? '1fr 1fr' : '1fr 1fr 1fr';
+  document.getElementById('dayOverlay').style.zIndex = esImp ? '300' : '';
+}
+function openImpDia(k) {
+  const r = impMarc.tarjetas[k];
+  impVentanaModo(true);
+  modalState = { imp: r, personId: null, date: r.fecha, status: r.estado || (r.horaEntrada ? 'PRESENTE' : null),
+                 obs: r.observacion || '', photoData: r.fotoManual || null };
+  document.getElementById('dayModalTitle').textContent = formatName(r.nombre);
+  const dow = new Date(r.fecha + 'T12:00:00').toLocaleDateString('es-PY', { weekday: 'long' });
+  document.getElementById('dayModalDate').textContent = dow.charAt(0).toUpperCase() + dow.slice(1) + ' ' + impFecha(r.fecha) + ' · Impulso · ' + impMarc.camp.nombre;
+  document.getElementById('statusPills').innerHTML = Object.entries(STATUS_LABELS).map(([kk, v]) =>
+    `<div class="pill${modalState.status === kk ? ' selected-' + kk : ''}" data-status="${kk}" onclick="selectStatus('${kk}')">${v}</div>`).join('');
+  document.getElementById('obsInput').value = modalState.obs;
+  const sec = document.getElementById('promoPhotosSection');
+  if (r.fotoEntrada || r.fotoSalida) {
+    sec.style.display = 'block';
+    const imgStyle = 'width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;cursor:pointer;border:2px solid';
+    const emptyStyle = 'width:100%;aspect-ratio:1;background:var(--gray-ll);border-radius:6px;border:2px dashed var(--gray-l);display:flex;align-items:center;justify-content:center;color:var(--gray)';
+    const img = (u, c) => u ? `<img src="${impEsc(u)}" style="${imgStyle} ${c}" onclick="window.open('${impEsc(u)}','_blank')">` : `<div style="${emptyStyle}">📷</div>`;
+    document.getElementById('photoEntradaWrap').innerHTML = img(r.fotoEntrada, 'var(--green)');
+    document.getElementById('photoSalidaWrap').innerHTML = img(r.fotoSalida, 'var(--red)');
+    document.getElementById('horaEntradaLbl').textContent = r.horaEntrada || '';
+    document.getElementById('horaSalidaLbl').textContent = r.horaSalida || '';
+  } else sec.style.display = 'none';
+  if (modalState.photoData) {
+    const zone = document.getElementById('dayPhotoZone');
+    zone.innerHTML = `<img src="${impEsc(modalState.photoData)}" style="width:100%;max-height:180px;object-fit:cover"><button class="btn-remove-photo" onclick="event.stopPropagation();clearDayPhoto()">✕</button>`;
+    zone.classList.add('has-photo');
+    document.getElementById('btnDelPhoto').style.display = 'inline';
+  } else clearDayPhoto();
+  document.getElementById('dayOverlay').classList.add('open');
+}
+async function impGuardarDia(body, msg) {
+  const r = modalState.imp;
+  try {
+    await impPost('/impulsos/estado', { campaniaId: r.campaniaId || impMarc.camp.id, ci: r.ci, fecha: r.fecha, ...body });
+    closeDayModal();
+    showToast(msg, 'success');
+    cargarImpMarcaciones();
+    renderImpulsos();
+  } catch (e) { showToast('No se pudo guardar: ' + e.message, 'error'); }
+}
+function saveImpDia() {
+  if (!modalState.status) { showToast('Seleccioná un estado', 'error'); return; }
+  return impGuardarDia({ estado: modalState.status, observacion: document.getElementById('obsInput').value.trim(),
+                         fotoManual: modalState.photoData || '' }, 'Guardado');
+}
+function clearImpDia() {
+  if (!confirm('¿Limpiar el estado, la observación y la foto manual de este día? Las fotos que marcó la persona no se borran.')) return;
+  return impGuardarDia({ limpiar: true }, 'Registro limpiado');
 }
 
 // Campañas viejas que quedaron en el navegador de esta computadora.
