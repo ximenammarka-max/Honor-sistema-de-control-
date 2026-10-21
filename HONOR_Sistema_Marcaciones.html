@@ -673,7 +673,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--navy);
 
 <!-- Marcaciones de una campaña de impulso -->
 <div class="overlay" id="impMarcOverlay" onclick="closeImpMarcaciones()">
-<div class="modal modal-lg" onclick="event.stopPropagation()" style="width:min(900px,95vw)">
+<div class="modal modal-lg" onclick="event.stopPropagation()" style="width:min(1250px,95vw)">
   <button class="modal-close" onclick="closeImpMarcaciones()">✕</button>
   <div class="modal-title" id="impMarcTitle">Marcaciones</div>
   <div style="display:flex;gap:.5rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:.75rem">
@@ -1678,21 +1678,45 @@ async function cargarImpMarcaciones() {
     const d = await impGet(`/impulsos/marcaciones?campania=${encodeURIComponent(impMarc.camp.id)}&desde=${desde}&hasta=${hasta}`);
     impMarc.filas = d.data.sort((a, b) => b.fecha.localeCompare(a.fecha) || a.nombre.localeCompare(b.nombre));
   } catch(e) { el.innerHTML = `<div style="padding:1rem;color:var(--red);font-size:.8rem">${impEsc(e.message)}</div>`; return; }
-  if (!impMarc.filas.length) { el.innerHTML = '<div class="empty-state"><div class="ico">📷</div><div class="msg">Todavía nadie marcó en estas fechas.</div></div>'; return; }
-  const foto = (url, hora) => hora
-    ? `<div style="display:flex;align-items:center;gap:.4rem">${url ? `<a href="${impEsc(url)}" target="_blank"><img class="hoy-photo" src="${impEsc(url)}"></a>` : ''}<span>${impEsc(hora)}</span></div>`
-    : '<span style="color:var(--red);font-size:.72rem">Sin marcar</span>';
-  const personasDia = new Set(impMarc.filas.map(r => r.ci)).size;
-  const th = 'text-align:left;padding:.45rem .5rem;font-size:.68rem;color:var(--gray);text-transform:uppercase;border-bottom:1.5px solid var(--gray-l)';
-  const td = 'padding:.4rem .5rem;font-size:.8rem;border-bottom:1px solid var(--gray-l)';
-  el.innerHTML = `<div style="font-size:.75rem;color:var(--gray);margin-bottom:.5rem">${impMarc.filas.length} jornada(s) · ${personasDia} persona(s)</div>
-    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">
-      <thead><tr><th style="${th}">Fecha</th><th style="${th}">Persona</th><th style="${th}">Cédula</th><th style="${th}">Entrada</th><th style="${th}">Salida</th><th style="${th}">Horas</th></tr></thead>
-      <tbody>${impMarc.filas.map(r => `<tr>
-        <td style="${td}">${impFecha(r.fecha)}</td><td style="${td};font-weight:600">${impEsc(r.nombre)}</td><td style="${td}">${impEsc(r.ci)}</td>
-        <td style="${td}">${foto(r.fotoEntrada, r.horaEntrada)}</td><td style="${td}">${foto(r.fotoSalida, r.horaSalida)}</td>
-        <td style="${td}">${impHoras(r.horaEntrada, r.horaSalida)}</td></tr>`).join('')}</tbody>
-    </table></div>`;
+  // Tarjetas iguales a las de la pestaña Hoy (pedido 21/10/2026), una por
+  // persona y por dia. Hoy tambien muestra a quienes todavia no marcaron.
+  const hoy = impHoy();
+  const porDia = {};
+  impMarc.filas.forEach(r => (porDia[r.fecha] = porDia[r.fecha] || []).push(r));
+  if ((!desde || desde <= hoy) && (!hasta || hoy <= hasta)) {
+    const marcaron = new Set((porDia[hoy] || []).map(r => r.ci));
+    const faltan = imp.personas.filter(p => p.campaniaId === impMarc.camp.id && !marcaron.has(p.ci)).map(p => ({ fecha: hoy, ci: p.ci, nombre: p.nombre }));
+    if (faltan.length) porDia[hoy] = [...(porDia[hoy] || []), ...faltan];
+  }
+  const dias = Object.keys(porDia).sort().reverse();
+  if (!dias.length) { el.innerHTML = '<div class="empty-state"><div class="ico">📷</div><div class="msg">Todavía nadie marcó en estas fechas.</div></div>'; return; }
+  const foto = url => url ? `<img class="hoy-photo" src="${impEsc(url)}" onclick="window.open('${impEsc(url)}','_blank')" style="cursor:pointer">` : '';
+  const DOW = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  const tarjeta = r => `
+    <div class="hoy-card">
+      <div class="hoy-card-hdr">
+        <div class="hoy-avatar">${initials(r.nombre)}</div>
+        <div class="hoy-name">${impEsc(formatName(r.nombre))}</div>
+        <div class="p-type-badge p-type-impulso">Impulso</div>
+      </div>
+      <div class="hoy-body">
+        ${r.horaEntrada ? `
+          <div class="hoy-photos">${foto(r.fotoEntrada) || '<div class="hoy-photo-empty">📷</div>'}${foto(r.fotoSalida)}</div>
+          <div class="hoy-info">
+            <div class="hoy-status s-PRESENTE">OK</div>
+            <div class="hoy-horas">🟢 ${impEsc(r.horaEntrada)}${r.horaSalida ? ' 🔴 ' + impEsc(r.horaSalida) : ''}${impHoras(r.horaEntrada, r.horaSalida) ? ' · ' + impHoras(r.horaEntrada, r.horaSalida) : ''}</div>
+          </div>` : `<div class="hoy-sin">Sin registrar hoy</div>`}
+      </div>
+    </div>`;
+  const personas = new Set(impMarc.filas.map(r => r.ci)).size;
+  el.innerHTML = `<div style="font-size:.75rem;color:var(--gray);margin-bottom:.75rem">${impMarc.filas.length} jornada(s) marcada(s) · ${personas} persona(s)</div>` +
+    dias.map(f => {
+      const lista = porDia[f].sort((a, b) => (!a.horaEntrada) - (!b.horaEntrada) || a.nombre.localeCompare(b.nombre));
+      const n = lista.filter(r => r.horaEntrada).length;
+      return `<div style="font-size:.8rem;font-weight:700;margin:.25rem 0 .5rem">${DOW[new Date(f + 'T12:00:00').getDay()]} ${impFecha(f)}
+          <span style="font-weight:400;color:var(--gray)"> · ${n} marcaron${f === hoy && lista.length > n ? ' · ' + (lista.length - n) + ' sin registrar' : ''}</span></div>
+        <div class="hoy-grid" style="margin-bottom:1.1rem">${lista.map(tarjeta).join('')}</div>`;
+    }).join('');
 }
 function exportImpExcel() {
   if (!impMarc.filas.length) { showToast('No hay marcaciones para exportar','error'); return; }
