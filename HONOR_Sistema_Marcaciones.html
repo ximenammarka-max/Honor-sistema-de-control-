@@ -371,10 +371,11 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--navy);
 <div id="view-impulsos" style="display:none">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
     <div>
-      <div style="font-size:1rem;font-weight:700">Equipos de Impulso</div>
-      <div style="font-size:.78rem;color:var(--gray);margin-top:.15rem">Promotores ocasionales por campaña</div>
+      <div style="font-size:1rem;font-weight:700">Campañas de impulso</div>
+      <div style="font-size:.78rem;color:var(--gray);margin-top:.15rem">Personas que trabajan por campaña. Marcan con foto en la misma app, pero sus marcaciones van aparte de la nómina fija.</div>
     </div>
-    <div style="display:flex;gap:.5rem">
+    <div style="display:flex;gap:.5rem;align-items:center">
+      <label style="font-size:.75rem;color:var(--gray);display:flex;gap:.3rem;align-items:center;cursor:pointer"><input type="checkbox" id="impVerFinalizadas" onchange="renderImpulsos(false)"> Ver finalizadas</label>
       <button class="btn-action secondary" onclick="openAddCampania()">+ Nueva campaña</button>
     </div>
   </div>
@@ -621,7 +622,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--navy);
 <div class="overlay" id="campaniaOverlay" onclick="closeCampaniaModal()">
 <div class="modal modal-sm" onclick="event.stopPropagation()">
   <button class="modal-close" onclick="closeCampaniaModal()">✕</button>
-  <div class="modal-title">Nueva campaña de impulso</div>
+  <div class="modal-title" id="campaniaModalTitle">Nueva campaña de impulso</div>
+  <input type="hidden" id="campaniaId">
   <div class="field-group">
     <label class="field-label">Nombre de campaña</label>
     <input class="field-input" id="campaniaName" type="text" placeholder="Ej: Impulso HONOR Agosto 2026">
@@ -642,8 +644,44 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--navy);
   </div>
   <div class="modal-actions">
     <button class="btn-cancel" onclick="closeCampaniaModal()">Cancelar</button>
-    <button class="btn-save" onclick="saveCampania()">Crear campaña</button>
+    <button class="btn-save" id="campaniaSaveBtn" onclick="saveCampania()">Crear campaña</button>
   </div>
+</div>
+</div>
+
+<!-- Personas de una campaña de impulso -->
+<div class="overlay" id="impPersOverlay" onclick="closeImpPersonas()">
+<div class="modal modal-lg" onclick="event.stopPropagation()">
+  <button class="modal-close" onclick="closeImpPersonas()">✕</button>
+  <div class="modal-title" id="impPersTitle">Agregar personas</div>
+  <div class="field-group" id="impPersPreviasWrap">
+    <label class="field-label">Ya trabajaron en otras campañas</label>
+    <input class="field-input" id="impPersBuscar" type="text" placeholder="Buscar por nombre o cédula..." oninput="renderImpPersPrevias()" style="margin-bottom:.4rem">
+    <div id="impPersPrevias" style="max-height:180px;overflow-y:auto;border:1.5px solid var(--gray-l);border-radius:8px;padding:.35rem"></div>
+  </div>
+  <div class="field-group">
+    <label class="field-label">Personas nuevas</label>
+    <textarea class="field-input" id="impPersTexto" rows="6" placeholder="Una persona por línea: cédula y nombre.&#10;Podés pegar dos columnas copiadas de Excel.&#10;&#10;4567890  PEREZ GOMEZ, ANA MARIA&#10;5123456  BENITEZ, CARLOS"></textarea>
+    <div style="font-size:.72rem;color:var(--gray);margin-top:.3rem">Con esa cédula la persona se busca en la app de marcaciones.</div>
+  </div>
+  <div class="modal-actions">
+    <button class="btn-cancel" onclick="closeImpPersonas()">Cancelar</button>
+    <button class="btn-save" id="impPersSaveBtn" onclick="saveImpPersonas()">Agregar</button>
+  </div>
+</div>
+</div>
+
+<!-- Marcaciones de una campaña de impulso -->
+<div class="overlay" id="impMarcOverlay" onclick="closeImpMarcaciones()">
+<div class="modal modal-lg" onclick="event.stopPropagation()" style="width:min(900px,95vw)">
+  <button class="modal-close" onclick="closeImpMarcaciones()">✕</button>
+  <div class="modal-title" id="impMarcTitle">Marcaciones</div>
+  <div style="display:flex;gap:.5rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:.75rem">
+    <div><label class="field-label">Desde</label><input class="field-input" id="impMarcDesde" type="date" onchange="cargarImpMarcaciones()"></div>
+    <div><label class="field-label">Hasta</label><input class="field-input" id="impMarcHasta" type="date" onchange="cargarImpMarcaciones()"></div>
+    <button class="btn-action secondary" onclick="exportImpExcel()" style="margin-left:auto">⬇ Excel</button>
+  </div>
+  <div id="impMarcContent"></div>
 </div>
 </div>
 
@@ -753,7 +791,6 @@ const dbDelete = (s,k)   => new Promise((r,j) => { const t=db.transaction(s,'rea
 // STATE
 // ══════════════════════════════════════════════
 let persons = [];
-let campanias = [];
 let currentTab = 'hoy';
 let currentView = 'calendario';
 let selectedPersonId = null;
@@ -803,8 +840,6 @@ async function init() {
     }
   }
 
-  // Load campanias
-  campanias = await dbGetAll('campanias');
 
   // Set current month
   const now = new Date();
@@ -1406,83 +1441,292 @@ async function savePerson() {
 // ══════════════════════════════════════════════
 // IMPULSOS
 // ══════════════════════════════════════════════
-function openAddCampania() { document.getElementById('campaniaOverlay').classList.add('open'); }
+// 21/10/2026: antes las campañas se guardaban solo en el navegador de esta
+// computadora y la app de marcaciones no las conocia (habia que cargar a la
+// persona en Promotores y se mezclaba con los fijos). Ahora todo vive en la
+// planilla (pestañas Campañas, Impulsadores y MarcacionesImpulso, via el
+// worker) y la persona marca con foto en la misma app, buscandose por cedula.
+let imp = { campanias: [], personas: [], conteo: {}, cargado: false };
+let impMarc = { camp: null, filas: [] };
+
+const impUrl = () => localStorage.getItem('workerUrl') || WORKER_URL;
+const impEsc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+const impHoy = () => { const n = new Date(); return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0'); };
+const impFecha = f => f ? f.split('-').reverse().join('/') : '—';
+
+async function impGet(path) {
+  const sep = path.includes('?') ? '&' : '?';
+  const res = await fetch(impUrl() + path + sep + 'key=' + GAS_SECRET);
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error || 'Error del servidor');
+  return data;
+}
+async function impPost(path, body) {
+  const res = await fetch(impUrl() + path, { method:'POST', headers:{ 'Content-Type':'application/json' },
+    body: JSON.stringify({ key: GAS_SECRET, ...body }) });
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error || 'Error del servidor');
+  return data;
+}
+
+function impEstado(c) {
+  const hoy = impHoy();
+  if (!c.activa) return { lbl:'Finalizada', bg:'var(--gray-ll)', col:'var(--gray)' };
+  if (c.hasta && c.hasta < hoy) return { lbl:'Terminó', bg:'var(--gray-ll)', col:'var(--gray)' };
+  if (c.desde && c.desde > hoy) return { lbl:'Programada', bg:'#dbeafe', col:'#1d4ed8' };
+  return { lbl:'Activa hoy', bg:'#d4f5e2', col:'var(--green)' };
+}
+
+function openAddCampania(id) {
+  const c = id ? imp.campanias.find(x => x.id === id) : null;
+  document.getElementById('campaniaId').value = c ? c.id : '';
+  document.getElementById('campaniaName').value = c ? c.nombre : '';
+  document.getElementById('campaniaCliente').value = c ? c.cliente : '';
+  document.getElementById('campaniaInicio').value = c ? c.desde : '';
+  document.getElementById('campaniaFin').value = c ? c.hasta : '';
+  document.getElementById('campaniaModalTitle').textContent = c ? 'Editar campaña' : 'Nueva campaña de impulso';
+  document.getElementById('campaniaSaveBtn').textContent = c ? 'Guardar' : 'Crear campaña';
+  document.getElementById('campaniaOverlay').classList.add('open');
+}
 function closeCampaniaModal() { document.getElementById('campaniaOverlay').classList.remove('open'); }
 
 async function saveCampania() {
-  const name    = document.getElementById('campaniaName').value.trim();
+  const id      = document.getElementById('campaniaId').value;
+  const nombre  = document.getElementById('campaniaName').value.trim();
   const cliente = document.getElementById('campaniaCliente').value.trim();
-  const inicio  = document.getElementById('campaniaInicio').value;
-  const fin     = document.getElementById('campaniaFin').value;
-  if (!name) { showToast('El nombre es requerido','error'); return; }
-  const camp = { id:'camp_'+Date.now(), name, cliente, inicio, fin, active:true, promotores:[] };
-  campanias.push(camp);
-  await dbPut('campanias', camp);
-  closeCampaniaModal();
-  renderImpulsos();
-  showToast('Campaña creada','success');
+  const desde   = document.getElementById('campaniaInicio').value;
+  const hasta   = document.getElementById('campaniaFin').value;
+  if (!nombre) { showToast('El nombre es requerido','error'); return; }
+  if (!desde || !hasta) { showToast('Poné la fecha de inicio y de fin','error'); return; }
+  if (hasta < desde) { showToast('La fecha de fin es anterior a la de inicio','error'); return; }
+  const previa = imp.campanias.find(x => x.id === id);
+  const btn = document.getElementById('campaniaSaveBtn'); btn.disabled = true;
+  try {
+    await impPost('/impulsos/campania', { accion:'guardar', campania:{ id: id || undefined, nombre, cliente, desde, hasta, activa: previa ? previa.activa : true } });
+    closeCampaniaModal();
+    showToast(id ? 'Campaña guardada' : 'Campaña creada','success');
+    renderImpulsos();
+  } catch(e) { showToast('No se pudo guardar: ' + e.message,'error'); }
+  btn.disabled = false;
 }
 
-async function renderImpulsos() {
-  const el = document.getElementById('impulsosContent');
-  campanias = await dbGetAll('campanias');
-  if (!campanias.length) {
-    el.innerHTML = `<div class="empty-state"><div class="ico">⚡</div><div class="msg">No hay campañas de impulso. Creá la primera.</div></div>`;
-    return;
-  }
-  el.innerHTML = campanias.map(c => `
-    <div class="cierre-section" style="margin-bottom:.75rem">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
-        <div>
-          <div style="font-size:.9rem;font-weight:700">${c.name}</div>
-          <div style="font-size:.72rem;color:var(--gray)">${c.cliente||''} · ${c.inicio||'—'} al ${c.fin||'—'}</div>
-        </div>
-        <div style="display:flex;gap:.5rem">
-          <button class="btn-action secondary" onclick="addImpulsoPromotor('${c.id}')">+ Promotor</button>
-          <button class="btn-action danger" onclick="deleteCampania('${c.id}')">Eliminar</button>
-        </div>
-      </div>
-      <div id="camp-${c.id}-list">
-        ${(c.promotores||[]).map(p => `
-          <div style="display:flex;align-items:center;gap:.5rem;padding:.35rem .5rem;background:var(--gray-ll);border-radius:6px;margin-bottom:.3rem;font-size:.78rem">
-            <span style="font-weight:600">${p.name}</span>
-            <span style="color:var(--gray)">${p.ci||''}</span>
-            <button onclick="removeImpulsoPromotor('${c.id}','${p.id}')" style="margin-left:auto;background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem">✕</button>
-          </div>
-        `).join('')}
-        ${!(c.promotores||[]).length ? '<div style="font-size:.72rem;color:var(--gray);padding:.25rem">Sin promotores cargados</div>' : ''}
-      </div>
-    </div>
-  `).join('');
-}
-
-async function addImpulsoPromotor(campId) {
-  const name = prompt('Nombre completo del promotor (APELLIDO, NOMBRE):');
-  if (!name) return;
-  const ci = prompt('CI:') || '';
-  const camp = campanias.find(c => c.id === campId);
-  if (!camp) return;
-  camp.promotores = camp.promotores || [];
-  camp.promotores.push({ id:'pi_'+Date.now(), name:name.toUpperCase(), ci });
-  await dbPut('campanias', camp);
-  renderImpulsos();
-  showToast('Promotor agregado','success');
-}
-
-async function removeImpulsoPromotor(campId, promId) {
-  const camp = campanias.find(c => c.id === campId);
-  if (!camp) return;
-  camp.promotores = (camp.promotores||[]).filter(p => p.id !== promId);
-  await dbPut('campanias', camp);
-  renderImpulsos();
+async function toggleCampania(id) {
+  const c = imp.campanias.find(x => x.id === id);
+  if (!c) return;
+  if (c.activa && !confirm('¿Finalizar "' + c.nombre + '"? Sus personas ya no van a poder marcar en esta campaña.')) return;
+  try {
+    await impPost('/impulsos/campania', { accion:'guardar', campania:{ ...c, activa: !c.activa } });
+    showToast(c.activa ? 'Campaña finalizada' : 'Campaña reactivada','success');
+    renderImpulsos();
+  } catch(e) { showToast('Error: ' + e.message,'error'); }
 }
 
 async function deleteCampania(id) {
-  if (!confirm('¿Eliminar esta campaña?')) return;
-  campanias = campanias.filter(c => c.id !== id);
-  await dbDelete('campanias', id);
+  const c = imp.campanias.find(x => x.id === id);
+  if (!c || !confirm('¿Eliminar la campaña "' + c.nombre + '"?')) return;
+  try {
+    await impPost('/impulsos/campania', { accion:'borrar', campania:{ id } });
+    showToast('Campaña eliminada','success');
+    renderImpulsos();
+  } catch(e) { showToast(e.message,'error'); }
+}
+
+async function renderImpulsos(recargar = true) {
+  const el = document.getElementById('impulsosContent');
+  if (recargar || !imp.cargado) {
+    if (!imp.cargado) el.innerHTML = '<div class="empty-state"><div class="ico">⏳</div><div class="msg">Cargando campañas...</div></div>';
+    try {
+      const [d, m] = await Promise.all([impGet('/impulsos'), impGet('/impulsos/marcaciones')]);
+      imp.campanias = d.campanias; imp.personas = d.personas; imp.cargado = true;
+      imp.conteo = {};
+      m.data.forEach(r => { imp.conteo[r.campaniaId] = (imp.conteo[r.campaniaId] || 0) + 1; });
+    } catch(e) {
+      el.innerHTML = `<div class="empty-state"><div class="ico">⚠️</div><div class="msg">No se pudieron traer las campañas: ${impEsc(e.message)}</div></div>`;
+      return;
+    }
+  }
+  const verFin = document.getElementById('impVerFinalizadas').checked;
+  const lista = imp.campanias
+    .filter(c => verFin || impEstado(c).lbl === 'Activa hoy' || impEstado(c).lbl === 'Programada')
+    .sort((a, b) => (b.desde || '').localeCompare(a.desde || ''));
+  const locales = (await dbGetAll('campanias')) || [];
+  const avisoLocal = locales.length ? `<div class="impulso-banner">💾 Hay ${locales.length} campaña(s) vieja(s) guardada(s) solo en esta computadora.
+      <button class="btn-action secondary" style="margin-left:auto" onclick="subirCampaniasLocales()">Pasarlas a la planilla</button></div>` : '';
+  if (!lista.length) {
+    el.innerHTML = avisoLocal + `<div class="empty-state"><div class="ico">⚡</div><div class="msg">${imp.campanias.length ? 'No hay campañas activas. Marcá "Ver finalizadas" para ver las anteriores.' : 'No hay campañas de impulso. Creá la primera.'}</div></div>`;
+    return;
+  }
+  el.innerHTML = avisoLocal + lista.map(c => {
+    const est = impEstado(c);
+    const pers = imp.personas.filter(p => p.campaniaId === c.id).sort((a, b) => a.nombre.localeCompare(b.nombre));
+    const dias = imp.conteo[c.id] || 0;
+    return `
+    <div class="cierre-section" style="margin-bottom:.75rem">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin-bottom:.5rem">
+        <div>
+          <div style="font-size:.9rem;font-weight:700">${impEsc(c.nombre)}
+            <span style="font-size:.65rem;font-weight:700;padding:.15rem .45rem;border-radius:5px;margin-left:.35rem;background:${est.bg};color:${est.col}">${est.lbl}</span></div>
+          <div style="font-size:.72rem;color:var(--gray)">${c.cliente ? impEsc(c.cliente) + ' · ' : ''}${impFecha(c.desde)} al ${impFecha(c.hasta)} · ${pers.length} persona(s) · ${dias} jornada(s) marcada(s)</div>
+        </div>
+        <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+          <button class="btn-action gold" onclick="openImpMarcaciones('${c.id}')">📷 Marcaciones</button>
+          <button class="btn-action secondary" onclick="openImpPersonas('${c.id}')">+ Personas</button>
+          <button class="btn-action secondary" onclick="openAddCampania('${c.id}')">Editar</button>
+          <button class="btn-action secondary" onclick="toggleCampania('${c.id}')">${c.activa ? 'Finalizar' : 'Reactivar'}</button>
+          ${dias ? '' : `<button class="btn-action danger" onclick="deleteCampania('${c.id}')">Eliminar</button>`}
+        </div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:.3rem">
+        ${pers.map(p => `
+          <div style="display:flex;align-items:center;gap:.4rem;padding:.3rem .5rem;background:var(--gray-ll);border-radius:6px;font-size:.75rem">
+            <span style="font-weight:600">${impEsc(p.nombre)}</span>
+            <span style="color:var(--gray)">${impEsc(p.ci)}</span>
+            <button onclick="quitarImpPersona('${c.id}','${p.ci}')" title="Quitar de la campaña" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem">✕</button>
+          </div>`).join('')}
+        ${!pers.length ? '<div style="font-size:.72rem;color:var(--gray);padding:.25rem">Sin personas cargadas. Tocá "+ Personas".</div>' : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Personas de la campaña
+let impPersCamp = null;
+function impPersonasPrevias() {
+  const ya = new Set(imp.personas.filter(p => p.campaniaId === impPersCamp).map(p => p.ci));
+  const unicas = {};
+  imp.personas.forEach(p => { if (!ya.has(p.ci)) unicas[p.ci] = p.nombre; });
+  return Object.entries(unicas).map(([ci, nombre]) => ({ ci, nombre })).sort((a, b) => a.nombre.localeCompare(b.nombre));
+}
+function openImpPersonas(id) {
+  impPersCamp = id;
+  const c = imp.campanias.find(x => x.id === id);
+  document.getElementById('impPersTitle').textContent = 'Agregar personas · ' + (c ? c.nombre : '');
+  document.getElementById('impPersTexto').value = '';
+  document.getElementById('impPersBuscar').value = '';
+  document.getElementById('impPersPreviasWrap').style.display = impPersonasPrevias().length ? '' : 'none';
+  renderImpPersPrevias();
+  document.getElementById('impPersOverlay').classList.add('open');
+}
+function closeImpPersonas() { document.getElementById('impPersOverlay').classList.remove('open'); }
+function renderImpPersPrevias() {
+  const q = document.getElementById('impPersBuscar').value.trim().toUpperCase();
+  const marcadas = new Set([...document.querySelectorAll('.imp-prev:checked')].map(x => x.value));
+  const lista = impPersonasPrevias().filter(p => !q || p.nombre.includes(q) || p.ci.includes(q));
+  document.getElementById('impPersPrevias').innerHTML = lista.length ? lista.map(p => `
+    <label style="display:flex;gap:.5rem;align-items:center;padding:.3rem .4rem;font-size:.8rem;cursor:pointer">
+      <input type="checkbox" class="imp-prev" value="${impEsc(p.ci)}" data-nombre="${impEsc(p.nombre)}" ${marcadas.has(p.ci) ? 'checked' : ''}>
+      <span style="font-weight:600">${impEsc(p.nombre)}</span><span style="color:var(--gray)">${impEsc(p.ci)}</span>
+    </label>`).join('') : '<div style="font-size:.75rem;color:var(--gray);padding:.4rem">Sin resultados</div>';
+}
+// "4567890 PEREZ, ANA" / "PEREZ, ANA 4.567.890" / dos columnas pegadas de Excel
+function impParsearLista(texto) {
+  const ok = [], mal = [];
+  texto.split(/\r?\n/).map(l => l.trim()).filter(Boolean).forEach(l => {
+    const m = l.match(/(\d[\d.]{4,})/);
+    const ci = m ? m[1].replace(/\D/g, '') : '';
+    const nombre = (m ? l.replace(m[1], ' ') : l).replace(/[\t;|]+/g, ' ').replace(/\s+/g, ' ').replace(/^[\s,-]+|[\s,-]+$/g, '').toUpperCase();
+    if (ci.length >= 5 && nombre.length >= 3) ok.push({ ci, nombre }); else mal.push(l);
+  });
+  return { ok, mal };
+}
+async function saveImpPersonas() {
+  const { ok, mal } = impParsearLista(document.getElementById('impPersTexto').value);
+  if (mal.length) { showToast('Revisá estas líneas (falta cédula o nombre): ' + mal.slice(0, 3).join(' / '),'error'); return; }
+  const previas = [...document.querySelectorAll('.imp-prev:checked')].map(x => ({ ci: x.value, nombre: x.dataset.nombre }));
+  const personas = [...previas, ...ok];
+  if (!personas.length) { showToast('Elegí o escribí al menos una persona','error'); return; }
+  const btn = document.getElementById('impPersSaveBtn'); btn.disabled = true;
+  try {
+    const r = await impPost('/impulsos/personas', { accion:'agregar', campaniaId: impPersCamp, personas });
+    closeImpPersonas();
+    showToast(r.agregadas + ' persona(s) agregada(s)' + (r.repetidas.length ? ' · ' + r.repetidas.length + ' ya estaban' : ''),'success');
+    renderImpulsos();
+  } catch(e) { showToast('No se pudo guardar: ' + e.message,'error'); }
+  btn.disabled = false;
+}
+async function quitarImpPersona(campId, ci) {
+  const p = imp.personas.find(x => x.campaniaId === campId && x.ci === ci);
+  if (!confirm('¿Quitar a ' + (p ? p.nombre : ci) + ' de esta campaña? Sus marcaciones ya hechas no se borran.')) return;
+  try {
+    await impPost('/impulsos/personas', { accion:'quitar', campaniaId: campId, ci });
+    renderImpulsos();
+  } catch(e) { showToast('Error: ' + e.message,'error'); }
+}
+
+// ── Marcaciones de la campaña
+function openImpMarcaciones(id) {
+  const c = imp.campanias.find(x => x.id === id);
+  impMarc = { camp: c, filas: [] };
+  document.getElementById('impMarcTitle').textContent = '📷 ' + c.nombre;
+  document.getElementById('impMarcDesde').value = c.desde || '';
+  document.getElementById('impMarcHasta').value = c.hasta || '';
+  document.getElementById('impMarcOverlay').classList.add('open');
+  cargarImpMarcaciones();
+}
+function closeImpMarcaciones() { document.getElementById('impMarcOverlay').classList.remove('open'); }
+function impHoras(e, s) {
+  if (!e || !s) return '';
+  const [h1, m1] = e.split(':').map(Number), [h2, m2] = s.split(':').map(Number);
+  const min = (h2 * 60 + m2) - (h1 * 60 + m1);
+  return min > 0 ? Math.floor(min / 60) + 'h ' + String(min % 60).padStart(2, '0') + 'm' : '';
+}
+async function cargarImpMarcaciones() {
+  const el = document.getElementById('impMarcContent');
+  const desde = document.getElementById('impMarcDesde').value, hasta = document.getElementById('impMarcHasta').value;
+  el.innerHTML = '<div style="padding:1rem;color:var(--gray);font-size:.8rem">Cargando...</div>';
+  try {
+    const d = await impGet(`/impulsos/marcaciones?campania=${encodeURIComponent(impMarc.camp.id)}&desde=${desde}&hasta=${hasta}`);
+    impMarc.filas = d.data.sort((a, b) => b.fecha.localeCompare(a.fecha) || a.nombre.localeCompare(b.nombre));
+  } catch(e) { el.innerHTML = `<div style="padding:1rem;color:var(--red);font-size:.8rem">${impEsc(e.message)}</div>`; return; }
+  if (!impMarc.filas.length) { el.innerHTML = '<div class="empty-state"><div class="ico">📷</div><div class="msg">Todavía nadie marcó en estas fechas.</div></div>'; return; }
+  const foto = (url, hora) => hora
+    ? `<div style="display:flex;align-items:center;gap:.4rem">${url ? `<a href="${impEsc(url)}" target="_blank"><img class="hoy-photo" src="${impEsc(url)}"></a>` : ''}<span>${impEsc(hora)}</span></div>`
+    : '<span style="color:var(--red);font-size:.72rem">Sin marcar</span>';
+  const personasDia = new Set(impMarc.filas.map(r => r.ci)).size;
+  const th = 'text-align:left;padding:.45rem .5rem;font-size:.68rem;color:var(--gray);text-transform:uppercase;border-bottom:1.5px solid var(--gray-l)';
+  const td = 'padding:.4rem .5rem;font-size:.8rem;border-bottom:1px solid var(--gray-l)';
+  el.innerHTML = `<div style="font-size:.75rem;color:var(--gray);margin-bottom:.5rem">${impMarc.filas.length} jornada(s) · ${personasDia} persona(s)</div>
+    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">
+      <thead><tr><th style="${th}">Fecha</th><th style="${th}">Persona</th><th style="${th}">Cédula</th><th style="${th}">Entrada</th><th style="${th}">Salida</th><th style="${th}">Horas</th></tr></thead>
+      <tbody>${impMarc.filas.map(r => `<tr>
+        <td style="${td}">${impFecha(r.fecha)}</td><td style="${td};font-weight:600">${impEsc(r.nombre)}</td><td style="${td}">${impEsc(r.ci)}</td>
+        <td style="${td}">${foto(r.fotoEntrada, r.horaEntrada)}</td><td style="${td}">${foto(r.fotoSalida, r.horaSalida)}</td>
+        <td style="${td}">${impHoras(r.horaEntrada, r.horaSalida)}</td></tr>`).join('')}</tbody>
+    </table></div>`;
+}
+function exportImpExcel() {
+  if (!impMarc.filas.length) { showToast('No hay marcaciones para exportar','error'); return; }
+  const c = impMarc.camp;
+  const filas = [...impMarc.filas].sort((a, b) => a.nombre.localeCompare(b.nombre) || a.fecha.localeCompare(b.fecha));
+  const detalle = [['FECHA','NOMBRE','CI','ENTRADA','SALIDA','HORAS','FOTO ENTRADA','FOTO SALIDA'],
+    ...filas.map(r => [impFecha(r.fecha), r.nombre, r.ci, r.horaEntrada || '', r.horaSalida || '', impHoras(r.horaEntrada, r.horaSalida), r.fotoEntrada || '', r.fotoSalida || ''])];
+  const porPersona = {};
+  filas.forEach(r => { const x = porPersona[r.ci] = porPersona[r.ci] || { nombre: r.nombre, dias: 0, completos: 0 }; x.dias++; if (r.horaEntrada && r.horaSalida) x.completos++; });
+  const resumen = [['NOMBRE','CI','DÍAS TRABAJADOS','DÍAS CON ENTRADA Y SALIDA'],
+    ...Object.entries(porPersona).map(([ci, x]) => [x.nombre, ci, x.dias, x.completos])];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resumen), 'Resumen');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(detalle), 'Detalle');
+  XLSX.writeFile(wb, 'HONOR_Impulso_' + c.nombre.replace(/[^\w\- ]+/g, '').replace(/\s+/g, '_') + '.xlsx');
+  showToast('Excel descargado','success');
+}
+
+// Campañas viejas que quedaron en el navegador de esta computadora.
+async function subirCampaniasLocales() {
+  const locales = await dbGetAll('campanias');
+  if (!locales.length || !confirm('¿Pasar ' + locales.length + ' campaña(s) de esta computadora a la planilla?')) return;
+  let sinCi = 0;
+  try {
+    for (const c of locales) {
+      const r = await impPost('/impulsos/campania', { accion:'guardar', campania:{ nombre: c.name, cliente: c.cliente, desde: c.inicio, hasta: c.fin, activa: c.active !== false } });
+      const personas = (c.promotores || []).map(p => ({ ci: String(p.ci || '').replace(/\D/g, ''), nombre: p.name })).filter(p => p.ci);
+      sinCi += (c.promotores || []).length - personas.length;
+      if (personas.length) await impPost('/impulsos/personas', { accion:'agregar', campaniaId: r.campania.id, personas });
+      await dbDelete('campanias', c.id);
+    }
+    showToast('Campañas pasadas a la planilla' + (sinCi ? ' · ' + sinCi + ' persona(s) sin cédula no se pasaron' : ''),'success');
+  } catch(e) { showToast('Error: ' + e.message,'error'); }
   renderImpulsos();
-  showToast('Campaña eliminada','success');
 }
 
 // ══════════════════════════════════════════════
