@@ -371,11 +371,12 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--navy);
 <div id="view-impulsos" style="display:none">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
     <div>
-      <div style="font-size:1rem;font-weight:700">Activaciones</div>
-      <div style="font-size:.78rem;color:var(--gray);margin-top:.15rem">Todas las activaciones son de Honor. Cada mes se crea solo; cargá quiénes hacen activaciones ese mes (pueden ser también de la nómina fija) y cada promotora elige el punto de venta al marcar su entrada.</div>
+      <div style="font-size:1rem;font-weight:700">Campañas de impulso</div>
+      <div style="font-size:.78rem;color:var(--gray);margin-top:.15rem">Personas que trabajan por campaña. Marcan con foto en la misma app, pero sus marcaciones van aparte de la nómina fija.</div>
     </div>
     <div style="display:flex;gap:.5rem;align-items:center">
-      <label style="font-size:.75rem;color:var(--gray);display:flex;gap:.3rem;align-items:center;cursor:pointer"><input type="checkbox" id="impVerFinalizadas" onchange="renderImpulsos(false)"> Ver meses y campañas anteriores</label>
+      <label style="font-size:.75rem;color:var(--gray);display:flex;gap:.3rem;align-items:center;cursor:pointer"><input type="checkbox" id="impVerFinalizadas" onchange="renderImpulsos(false)"> Ver finalizadas</label>
+      <button class="btn-action secondary" onclick="openAddCampania()">+ Nueva campaña</button>
     </div>
   </div>
   <div id="impulsosContent"></div>
@@ -453,12 +454,6 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--navy);
   <div class="field-group">
     <div class="field-label">Estado</div>
     <div class="pills" id="statusPills"></div>
-  </div>
-
-  <div class="field-group" id="impPdvGroup" style="display:none">
-    <div class="field-label">Punto de venta</div>
-    <input class="field-input" id="impPdvInput" list="impPdvLista" placeholder="Punto de venta de la activación" autocomplete="off">
-    <datalist id="impPdvLista"></datalist>
   </div>
 
   <div class="field-group">
@@ -1459,9 +1454,7 @@ async function savePerson() {
 // persona en Promotores y se mezclaba con los fijos). Ahora todo vive en la
 // planilla (pestañas Campañas, Impulsadores y MarcacionesImpulso, via el
 // worker) y la persona marca con foto en la misma app, buscandose por cedula.
-let imp = { campanias: [], personas: [], puntos: [], conteo: {}, filas: {}, pdvs: {}, cargado: false };
-// Activaciones (25/11/2026): la del mes (id ACT-AAAA-MM) la crea sola el worker.
-const impEsMes = c => String(c && c.id || '').startsWith('ACT-');
+let imp = { campanias: [], personas: [], conteo: {}, filas: {}, cargado: false };
 let impMarc = { camp: null, filas: [] };
 
 const impUrl = () => localStorage.getItem('workerUrl') || WORKER_URL;
@@ -1552,14 +1545,12 @@ async function renderImpulsos(recargar = true) {
     if (!imp.cargado) el.innerHTML = '<div class="empty-state"><div class="ico">⏳</div><div class="msg">Cargando campañas...</div></div>';
     try {
       const [d, m] = await Promise.all([impGet('/impulsos'), impGet('/impulsos/marcaciones')]);
-      imp.campanias = d.campanias; imp.personas = d.personas; imp.puntos = d.puntos || []; imp.cargado = true;
-      imp.conteo = {}; imp.filas = {}; imp.pdvs = {};
+      imp.campanias = d.campanias; imp.personas = d.personas; imp.cargado = true;
+      imp.conteo = {}; imp.filas = {};
       m.data.forEach(r => {
         imp.filas[r.campaniaId] = (imp.filas[r.campaniaId] || 0) + 1;
         if (r.horaEntrada) imp.conteo[r.campaniaId] = (imp.conteo[r.campaniaId] || 0) + 1;
-        if (r.pdv) (imp.pdvs[r.campaniaId] = imp.pdvs[r.campaniaId] || new Set()).add(r.pdv);
       });
-      document.getElementById('impPdvLista').innerHTML = imp.puntos.map(x => `<option value="${impEsc(x)}">`).join('');
     } catch(e) {
       el.innerHTML = `<div class="empty-state"><div class="ico">⚠️</div><div class="msg">No se pudieron traer las campañas: ${impEsc(e.message)}</div></div>`;
       return;
@@ -1573,29 +1564,27 @@ async function renderImpulsos(recargar = true) {
   const avisoLocal = locales.length ? `<div class="impulso-banner">💾 Hay ${locales.length} campaña(s) vieja(s) guardada(s) solo en esta computadora.
       <button class="btn-action secondary" style="margin-left:auto" onclick="subirCampaniasLocales()">Pasarlas a la planilla</button></div>` : '';
   if (!lista.length) {
-    el.innerHTML = avisoLocal + `<div class="empty-state"><div class="ico">⚡</div><div class="msg">No hay activaciones este mes. Marcá "Ver meses y campañas anteriores" para ver las anteriores.</div></div>`;
+    el.innerHTML = avisoLocal + `<div class="empty-state"><div class="ico">⚡</div><div class="msg">${imp.campanias.length ? 'No hay campañas activas. Marcá "Ver finalizadas" para ver las anteriores.' : 'No hay campañas de impulso. Creá la primera.'}</div></div>`;
     return;
   }
   el.innerHTML = avisoLocal + lista.map(c => {
     const est = impEstado(c);
     const pers = imp.personas.filter(p => p.campaniaId === c.id).sort((a, b) => a.nombre.localeCompare(b.nombre));
     const dias = imp.conteo[c.id] || 0;
-    const nPdv = imp.pdvs[c.id] ? imp.pdvs[c.id].size : 0;
-    const mes = impEsMes(c);
     return `
     <div class="cierre-section" style="margin-bottom:.75rem">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin-bottom:.5rem">
         <div>
           <div style="font-size:.9rem;font-weight:700">${impEsc(c.nombre)}
             <span style="font-size:.65rem;font-weight:700;padding:.15rem .45rem;border-radius:5px;margin-left:.35rem;background:${est.bg};color:${est.col}">${est.lbl}</span></div>
-          <div style="font-size:.72rem;color:var(--gray)">${!mes && c.cliente ? impEsc(c.cliente) + ' · ' : ''}${impFecha(c.desde)} al ${impFecha(c.hasta)} · ${pers.length} persona(s) · ${dias} jornada(s) marcada(s)${mes ? ' · ' + nPdv + ' punto(s) de venta' : ''}</div>
+          <div style="font-size:.72rem;color:var(--gray)">${c.cliente ? impEsc(c.cliente) + ' · ' : ''}${impFecha(c.desde)} al ${impFecha(c.hasta)} · ${pers.length} persona(s) · ${dias} jornada(s) marcada(s)</div>
         </div>
         <div style="display:flex;gap:.4rem;flex-wrap:wrap">
           <button class="btn-action gold" onclick="openImpMarcaciones('${c.id}')">📷 Marcaciones</button>
           <button class="btn-action secondary" onclick="openImpPersonas('${c.id}')">+ Personas</button>
-          ${mes ? '' : `<button class="btn-action secondary" onclick="openAddCampania('${c.id}')">Editar</button>
+          <button class="btn-action secondary" onclick="openAddCampania('${c.id}')">Editar</button>
           <button class="btn-action secondary" onclick="toggleCampania('${c.id}')">${c.activa ? 'Finalizar' : 'Reactivar'}</button>
-          ${imp.filas[c.id] ? '' : `<button class="btn-action danger" onclick="deleteCampania('${c.id}')">Eliminar</button>`}`}
+          ${imp.filas[c.id] ? '' : `<button class="btn-action danger" onclick="deleteCampania('${c.id}')">Eliminar</button>`}
         </div>
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:.3rem">
@@ -1603,7 +1592,7 @@ async function renderImpulsos(recargar = true) {
           <div style="display:flex;align-items:center;gap:.4rem;padding:.3rem .5rem;background:var(--gray-ll);border-radius:6px;font-size:.75rem">
             <span style="font-weight:600">${impEsc(p.nombre)}</span>
             <span style="color:var(--gray)">${impEsc(p.ci)}</span>
-            <button onclick="quitarImpPersona('${c.id}','${p.ci}')" title="Quitar" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem">✕</button>
+            <button onclick="quitarImpPersona('${c.id}','${p.ci}')" title="Quitar de la campaña" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem">✕</button>
           </div>`).join('')}
         ${!pers.length ? '<div style="font-size:.72rem;color:var(--gray);padding:.25rem">Sin personas cargadas. Tocá "+ Personas".</div>' : ''}
       </div>
@@ -1617,8 +1606,6 @@ function impPersonasPrevias() {
   const ya = new Set(imp.personas.filter(p => p.campaniaId === impPersCamp).map(p => p.ci));
   const unicas = {};
   imp.personas.forEach(p => { if (!ya.has(p.ci)) unicas[p.ci] = p.nombre; });
-  // La nomina fija tambien puede hacer activaciones (25/11/2026)
-  persons.forEach(p => { const ci = String(p.ci || '').replace(/\D/g, ''); if (ci && !ya.has(ci)) unicas[ci] = String(p.name || '').toUpperCase(); });
   return Object.entries(unicas).map(([ci, nombre]) => ({ ci, nombre })).sort((a, b) => a.nombre.localeCompare(b.nombre));
 }
 function openImpPersonas(id) {
@@ -1670,7 +1657,7 @@ async function saveImpPersonas() {
 }
 async function quitarImpPersona(campId, ci) {
   const p = imp.personas.find(x => x.campaniaId === campId && x.ci === ci);
-  if (!confirm('¿Quitar a ' + (p ? p.nombre : ci) + '? Sus marcaciones ya hechas no se borran.')) return;
+  if (!confirm('¿Quitar a ' + (p ? p.nombre : ci) + ' de esta campaña? Sus marcaciones ya hechas no se borran.')) return;
   try {
     await impPost('/impulsos/personas', { accion:'quitar', campaniaId: campId, ci });
     renderImpulsos();
@@ -1725,8 +1712,8 @@ async function cargarImpMarcaciones() {
     <div class="hoy-card" style="cursor:pointer" onclick="openImpDia(${k})">
       <div class="hoy-card-hdr">
         <div class="hoy-avatar">${initials(r.nombre)}</div>
-        <div class="hoy-name">${impEsc(formatName(r.nombre))}${r.pdv ? `<div style="font-size:.68rem;font-weight:600;color:var(--gray)">📍 ${impEsc(r.pdv)}</div>` : ''}</div>
-        <div class="p-type-badge p-type-impulso">${impEsMes(impMarc.camp) ? 'Activación' : 'Impulso'}</div>
+        <div class="hoy-name">${impEsc(formatName(r.nombre))}</div>
+        <div class="p-type-badge p-type-impulso">Impulso</div>
       </div>
       <div class="hoy-body">
         ${est ? `
@@ -1746,9 +1733,8 @@ async function cargarImpMarcaciones() {
       const sinReg = r => !r.horaEntrada && !r.estado;
       const lista = porDia[f].sort((a, b) => sinReg(a) - sinReg(b) || a.nombre.localeCompare(b.nombre));
       const n = lista.filter(r => r.horaEntrada).length, sr = lista.filter(sinReg).length;
-      const pdvsDia = [...new Set(lista.map(r => r.pdv).filter(Boolean))].sort();
       return `<div style="font-size:.8rem;font-weight:700;margin:.25rem 0 .5rem">${DOW[new Date(f + 'T12:00:00').getDay()]} ${impFecha(f)}
-          <span style="font-weight:400;color:var(--gray)"> · ${n} marcaron${sr ? ' · ' + sr + ' sin registrar' : ''}${pdvsDia.length ? ' · 📍 ' + pdvsDia.map(impEsc).join(', ') : ''}</span></div>
+          <span style="font-weight:400;color:var(--gray)"> · ${n} marcaron${sr ? ' · ' + sr + ' sin registrar' : ''}</span></div>
         <div class="hoy-grid" style="margin-bottom:1.1rem">${lista.map(tarjeta).join('')}</div>`;
     }).join('');
 }
@@ -1757,16 +1743,8 @@ function exportImpExcel() {
   const c = impMarc.camp;
   const filas = [...impMarc.filas].sort((a, b) => a.nombre.localeCompare(b.nombre) || a.fecha.localeCompare(b.fecha));
   const estLbl = r => STATUS_LABELS[r.estado || (r.horaEntrada ? 'PRESENTE' : '')] || r.estado || '';
-  const detalle = [['FECHA','PUNTO DE VENTA','NOMBRE','CI','ESTADO','ENTRADA','SALIDA','HORAS','OBSERVACIÓN','FOTO ENTRADA','FOTO SALIDA','FOTO MANUAL'],
-    ...filas.map(r => [impFecha(r.fecha), r.pdv || '', r.nombre, r.ci, estLbl(r), r.horaEntrada || '', r.horaSalida || '', impHoras(r.horaEntrada, r.horaSalida), r.observacion || '', r.fotoEntrada || '', r.fotoSalida || '', r.fotoManual || ''])];
-  // Por punto de venta y dia: quienes activaron (25/11/2026)
-  const porPdv = {};
-  filas.filter(r => r.horaEntrada || r.estado === 'PRESENTE').forEach(r => {
-    const k = r.fecha + '|' + (r.pdv || 'SIN PUNTO DE VENTA');
-    (porPdv[k] = porPdv[k] || []).push(formatName(r.nombre));
-  });
-  const hojaPdv = [['FECHA','PUNTO DE VENTA','PERSONAS','QUIÉNES'],
-    ...Object.keys(porPdv).sort().map(k => { const [f, pdv] = k.split('|'); return [impFecha(f), pdv, porPdv[k].length, porPdv[k].join(', ')]; })];
+  const detalle = [['FECHA','NOMBRE','CI','ESTADO','ENTRADA','SALIDA','HORAS','OBSERVACIÓN','FOTO ENTRADA','FOTO SALIDA','FOTO MANUAL'],
+    ...filas.map(r => [impFecha(r.fecha), r.nombre, r.ci, estLbl(r), r.horaEntrada || '', r.horaSalida || '', impHoras(r.horaEntrada, r.horaSalida), r.observacion || '', r.fotoEntrada || '', r.fotoSalida || '', r.fotoManual || ''])];
   const porPersona = {};
   filas.forEach(r => {
     const x = porPersona[r.ci] = porPersona[r.ci] || { nombre: r.nombre, dias: 0, completos: 0 };
@@ -1777,7 +1755,6 @@ function exportImpExcel() {
     ...Object.entries(porPersona).map(([ci, x]) => [x.nombre, ci, x.dias, x.completos])];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resumen), 'Resumen');
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(hojaPdv), 'Por punto de venta');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(detalle), 'Detalle');
   XLSX.writeFile(wb, 'HONOR_Impulso_' + c.nombre.replace(/[^\w\- ]+/g, '').replace(/\s+/g, '_') + '.xlsx');
   showToast('Excel descargado','success');
@@ -1788,7 +1765,6 @@ function impVentanaModo(esImp) {
   const colA = document.getElementById('photoAlmuerzoWrap').parentElement;
   colA.style.display = esImp ? 'none' : '';
   colA.parentElement.style.gridTemplateColumns = esImp ? '1fr 1fr' : '1fr 1fr 1fr';
-  document.getElementById('impPdvGroup').style.display = esImp && impEsMes(impMarc.camp) ? '' : 'none';
   document.getElementById('dayOverlay').style.zIndex = esImp ? '300' : '';
 }
 function openImpDia(k) {
@@ -1798,8 +1774,7 @@ function openImpDia(k) {
                  obs: r.observacion || '', photoData: r.fotoManual || null };
   document.getElementById('dayModalTitle').textContent = formatName(r.nombre);
   const dow = new Date(r.fecha + 'T12:00:00').toLocaleDateString('es-PY', { weekday: 'long' });
-  document.getElementById('dayModalDate').textContent = dow.charAt(0).toUpperCase() + dow.slice(1) + ' ' + impFecha(r.fecha) + (impEsMes(impMarc.camp) ? ' · Activación' + (r.pdv ? ' · ' + r.pdv : '') : ' · Impulso · ' + impMarc.camp.nombre);
-  document.getElementById('impPdvInput').value = r.pdv || '';
+  document.getElementById('dayModalDate').textContent = dow.charAt(0).toUpperCase() + dow.slice(1) + ' ' + impFecha(r.fecha) + ' · Impulso · ' + impMarc.camp.nombre;
   document.getElementById('statusPills').innerHTML = Object.entries(STATUS_LABELS).map(([kk, v]) =>
     `<div class="pill${modalState.status === kk ? ' selected-' + kk : ''}" data-status="${kk}" onclick="selectStatus('${kk}')">${v}</div>`).join('');
   document.getElementById('obsInput').value = modalState.obs;
@@ -1835,8 +1810,7 @@ async function impGuardarDia(body, msg) {
 function saveImpDia() {
   if (!modalState.status) { showToast('Seleccioná un estado', 'error'); return; }
   return impGuardarDia({ estado: modalState.status, observacion: document.getElementById('obsInput').value.trim(),
-                         fotoManual: modalState.photoData || '',
-                         ...(impEsMes(impMarc.camp) ? { pdv: document.getElementById('impPdvInput').value.trim() } : {}) }, 'Guardado');
+                         fotoManual: modalState.photoData || '' }, 'Guardado');
 }
 function clearImpDia() {
   if (!confirm('¿Limpiar el estado, la observación y la foto manual de este día? Las fotos que marcó la persona no se borran.')) return;
@@ -1877,7 +1851,6 @@ function impPaginasPersona(per) {
       const manual = !r.fotoEntrada && !r.fotoSalida && r.fotoManual;
       celdas += `<td style="border:1px solid #e0e3f0;padding:3px;width:14%;vertical-align:top">
         <div style="background:#1a1f3a;color:#c9a84c;text-align:center;padding:2px;font-size:8px;font-weight:700">${DOW[new Date(r.fecha + 'T12:00:00').getDay()]} ${d}/${m}</div>
-        ${r.pdv ? `<div style="background:#f0f1f8;color:#1a1f3a;text-align:center;padding:1px 2px;font-size:6.5px;font-weight:700;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">📍 ${impEsc(r.pdv)}</div>` : ''}
         ${manual ? img(r.fotoManual, '📎 FOTO MANUAL', '#c9a84c') : img(r.fotoEntrada, '🟢 ENTRADA ' + (r.horaEntrada || ''), '#2ecc71', 'Entrada sin foto')}
         <div style="height:2px"></div>
         ${img(r.fotoSalida, '🔴 SALIDA ' + (r.horaSalida || ''), '#ff6b5b', 'Salida sin marcar')}
@@ -1888,7 +1861,7 @@ function impPaginasPersona(per) {
     }
     paginas += `<div style="width:297mm;padding:7mm 8mm 5mm;font-family:Arial,sans-serif">
       <div style="background:#1a1f3a;color:#fff;border-radius:6px;padding:8px 14px;display:grid;grid-template-columns:1fr 1fr 1fr;align-items:center;margin-bottom:6px">
-        <div><div style="font-size:20px;font-weight:700;letter-spacing:3px;color:#c9a84c">HONOR</div><div style="font-size:11px;font-weight:600">${impEsc(per.nombre)}</div><div style="font-size:9px;color:#8a8ea8">CI ${impEsc(per.ci)} · ${impEsMes(c) ? 'Activación' : 'Impulso'}</div></div>
+        <div><div style="font-size:20px;font-weight:700;letter-spacing:3px;color:#c9a84c">HONOR</div><div style="font-size:11px;font-weight:600">${impEsc(per.nombre)}</div><div style="font-size:9px;color:#8a8ea8">CI ${impEsc(per.ci)} · Impulso</div></div>
         <div style="text-align:center"><div style="font-size:14px;font-weight:700;color:#c9a84c">${impEsc(c.nombre)}</div><div style="font-size:9px">${impFecha(c.desde)} — ${impFecha(c.hasta)}</div><div style="font-size:8px;color:#8a8ea8">${c.cliente ? impEsc(c.cliente) : ''}</div></div>
         <div style="text-align:right"><div style="font-size:9px;font-weight:700;color:#c9a84c">REPORTE FOTOGRÁFICO</div><div style="font-size:9px">Días trabajados: ${trabajados}</div><div style="font-size:8px;color:#8a8ea8">Generado: ${hoyLbl}</div></div>
       </div>
